@@ -2580,8 +2580,14 @@ window.agentBridge = {
           error: decodeURIComponent(btn.dataset.error)
         });
 
-        if (fixed) {
+        if (fixed && fixed.trim()) {
           renderMermaidFixSuccess(wrapper, code.trim(), fixed);
+        } else {
+          // 防御：后端已把空结果转为 Err（见 fix_mermaid 注释），此处兜底
+          // 防止任何 falsy 返回值让按钮永远停在「修复中」
+          btn.textContent = '🤖 AI 修复';
+          btn.disabled = false;
+          showError('AI 修复返回了空结果，请重试');
         }
       } catch (err) {
         btn.textContent = '🤖 AI 修复';

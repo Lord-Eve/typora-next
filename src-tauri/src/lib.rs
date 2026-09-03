@@ -6,7 +6,7 @@ use std::fs;
 use std::hash::{Hash, Hasher};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
 
 pub mod agent_sdk_probe;
@@ -858,16 +858,6 @@ struct MermaidSvgInfo {
     svg: String,
 }
 
-fn system_font_db() -> Arc<fontdb::Database> {
-    static DB: OnceLock<Arc<fontdb::Database>> = OnceLock::new();
-    DB.get_or_init(|| {
-        let mut db = fontdb::Database::new();
-        db.load_system_fonts();
-        Arc::new(db)
-    })
-    .clone()
-}
-
 /// Render an SVG string to a high-resolution PNG byte vector.
 /// Export markdown to Word document using the cross-platform Rust converter.
 #[tauri::command]
@@ -1713,7 +1703,7 @@ async fn fix_mermaid(code: String, error: String, app: tauri::AppHandle) -> Resu
                 let url = format!("{}/v1/messages", base_url.trim_end_matches('/'));
                 let req = serde_json::json!({
                     "model": model,
-                    "max_tokens": 1024,
+                    "max_tokens": 4096,
                     "messages": [{"role": "user", "content": prompt}]
                 });
                 let resp = ureq::post(&url)
@@ -1727,11 +1717,20 @@ async fn fix_mermaid(code: String, error: String, app: tauri::AppHandle) -> Resu
             }
             AiProvider::Openai => {
                 let url = format!("{}/v1/chat/completions", base_url.trim_end_matches('/'));
-                let req = serde_json::json!({
+                let mut req = serde_json::json!({
                     "model": model,
-                    "max_tokens": 1024,
+                    "max_tokens": 4096,
                     "messages": [{"role": "user", "content": prompt}]
                 });
+                // DeepSeek 思考型模型（如 deepseek-v4-flash）：reasoning 与正文
+                // 共享 max_tokens，思考可能耗尽预算导致 content 为空
+                // （finish_reason=length，2026-09-03 实机复现）。修复 mermaid
+                // 是机械任务，不需要思考——官方 API 用 thinking.type=disabled 关闭。
+                // 只对 deepseek 官方端点注入，避免其他 OpenAI 兼容服务
+                // 因未知字段返回 400。
+                if base_url.contains("deepseek.com") {
+                    req["thinking"] = serde_json::json!({"type": "disabled"});
+                }
                 let resp = ureq::post(&url)
                     .set("Content-Type", "application/json")
                     .set("Authorization", &format!("Bearer {}", api_key))
@@ -1760,6 +1759,26 @@ async fn fix_mermaid(code: String, error: String, app: tauri::AppHandle) -> Resu
             .trim_start_matches("```")
             .trim_end_matches("```")
             .trim();
+
+        // 空结果必须显式报错——Ok("") 传到前端会被 `if (fixed)` 静默吞掉，
+        // 按钮永远停在「修复中」（2026-09-03 实机复现：HTTP 200 ok:true
+        // 但 UI 无反应，根因就是模型返回了空内容/只有围栏）。
+        // 报错信息带上原始返回片段 + finish_reason，便于分辨是
+        // 「token 预算被思考耗尽」（finish_reason=length）还是内容审查。
+        if cleaned.is_empty() {
+            let finish = if is_anthropic {
+                json["stop_reason"].as_str().unwrap_or("unknown")
+            } else {
+                json["choices"][0]["finish_reason"]
+                    .as_str()
+                    .unwrap_or("unknown")
+            };
+            let snippet: String = fixed_code.chars().take(200).collect();
+            return Err(format!(
+                "模型返回了空的修复结果（finish_reason={}，原始返回前200字: {:?}）",
+                finish, snippet
+            ));
+        }
 
         Ok(cleaned.to_string())
     })();
