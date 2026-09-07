@@ -117,8 +117,7 @@ pub fn render_svg_to_mermaid_image(svg: &str) -> Result<docx_export::MermaidImag
 
     // Target display size in Word (CSS pixels).
     let display_width = DOCX_MERMAID_MAX_WIDTH_PX;
-    let display_height =
-        ((display_width as f32) * original_height / original_width).round() as u32;
+    let display_height = ((display_width as f32) * original_height / original_width).round() as u32;
 
     // High-resolution pixmap for crisp printing.
     let target_width = ((display_width as f32) * RENDER_SCALE).round() as u32;
