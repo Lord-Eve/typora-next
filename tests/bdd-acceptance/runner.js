@@ -345,6 +345,36 @@ async function runAcceptanceTests() {
   totalPassed += roadmapResult.passed;
   totalFailed += roadmapResult.failed;
 
+  // Sprint 23: 学习者画像 v1（领域组合 + 类比素材）
+  console.log(`\n${YELLOW}▶ Sprint 23: Learner Persona (domains + analogy bank)${RESET}`);
+  const personaSteps = require('./sprint23_learner_persona.steps');
+  const personaResult = await runFeatureFile(
+    path.join(__dirname, '../sprint23/features/sprint23_learner_persona.feature'),
+    personaSteps
+  );
+  totalPassed += personaResult.passed;
+  totalFailed += personaResult.failed;
+
+  // Sprint 24: 内联 SVG 插图（engineering/humanities 内容增强 + E 层校验）
+  console.log(`\n${YELLOW}▶ Sprint 24: Inline SVG figures (engineering/humanities + E-layer gate)${RESET}`);
+  const svgSteps = require('./sprint24_inline_svg.steps');
+  const svgResult = await runFeatureFile(
+    path.join(__dirname, '../sprint24/features/sprint24_inline_svg.feature'),
+    svgSteps
+  );
+  totalPassed += svgResult.passed;
+  totalFailed += svgResult.failed;
+
+  // Sprint 25: LaTeX 兼容层（KaTeX 裸上下标 sanitize）
+  console.log(`\n${YELLOW}▶ Sprint 25: LaTeX compat sanitize (bare sup/sub after spacing)${RESET}`);
+  const latexSteps = require('./sprint25_latex_compat.steps');
+  const latexResult = await runFeatureFile(
+    path.join(__dirname, '../sprint25/features/sprint25_latex_compat.feature'),
+    latexSteps
+  );
+  totalPassed += latexResult.passed;
+  totalFailed += latexResult.failed;
+
   if (sprint10Steps._cleanup) sprint10Steps._cleanup.call({});
   if (paperImportSteps._cleanup) paperImportSteps._cleanup.call({});
   if (toolbarTooltipSteps._cleanup) toolbarTooltipSteps._cleanup.call({});

@@ -28,6 +28,58 @@ pub enum MathBlock {
     Block(String),
 }
 
+/// LaTeX spacing commands that produce KaTeX "internal" nodes.
+/// A bare ^ / _ directly after one of these is legal in real LaTeX
+/// (the script attaches to an implicit empty atom) but KaTeX rejects it
+/// with "Got group of unknown type: 'internal'".
+const SPACING_COMMANDS: [&str; 4] = ["\\,", "\\;", "\\:", "\\!"];
+
+/// Sanitize real-LaTeX idioms that KaTeX cannot parse.
+///
+/// Currently one rule (Sprint 25): a spacing command (`\,` `\;` `\:` `\!`)
+/// followed — ignoring whitespace — by a bare `^` or `_` gets an empty
+/// base group `{}` inserted right after the command:
+/// `1800\sim2000\,^\circ` → `1800\sim2000\,{}^\circ`.
+///
+/// Idempotent: already-fixed or unaffected input passes through unchanged.
+pub fn sanitize_latex(src: &str) -> String {
+    let spacing: Vec<Vec<char>> = SPACING_COMMANDS
+        .iter()
+        .map(|c| c.chars().collect())
+        .collect();
+    let chars: Vec<char> = src.chars().collect();
+    let mut out = String::with_capacity(src.len() + 8);
+    let mut i = 0;
+
+    while i < chars.len() {
+        let mut inserted = false;
+        if chars[i] == '\\' {
+            for cmd in &spacing {
+                if chars[i..].starts_with(cmd) {
+                    // Look past whitespace for a bare ^ or _
+                    let mut j = i + cmd.len();
+                    while j < chars.len() && matches!(chars[j], ' ' | '\t' | '\n') {
+                        j += 1;
+                    }
+                    if j < chars.len() && (chars[j] == '^' || chars[j] == '_') {
+                        out.extend(cmd.iter());
+                        out.push_str("{}");
+                        i += cmd.len();
+                        inserted = true;
+                        break;
+                    }
+                }
+            }
+        }
+        if !inserted {
+            out.push(chars[i]);
+            i += 1;
+        }
+    }
+
+    out
+}
+
 /// Pre-rendered Mermaid diagram to embed in DOCX output.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MermaidImage {
@@ -82,7 +134,7 @@ pub fn extract_math_blocks(text: &str) -> Vec<(usize, usize, MathBlock)> {
                             .map(|(b, _)| b)
                             .unwrap_or(text.len());
                         let content = text[byte_content_start..byte_end].to_string();
-                        let content = content.trim_end().to_string();
+                        let content = sanitize_latex(content.trim_end());
                         results.push((start, i + 2, MathBlock::Block(content)));
                         i += 2;
                         break;
@@ -131,7 +183,11 @@ pub fn extract_math_blocks(text: &str) -> Vec<(usize, usize, MathBlock)> {
                             .unwrap_or(text.len());
                         let content = &text[byte_content_start..byte_end];
                         if !content.is_empty() && !content.contains('\n') {
-                            results.push((start, i + 1, MathBlock::Inline(content.to_string())));
+                            results.push((
+                                start,
+                                i + 1,
+                                MathBlock::Inline(sanitize_latex(content)),
+                            ));
                             i += 1;
                             break;
                         }
