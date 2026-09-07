@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.4.3] - 2026-09-07
+
+### Features
+
+- **工科/人文课程内联 SVG 实物插图（Sprint 24）**：engineering/humanities 课程每章自动生成 ≥1 个内联 SVG 插图（设备剖面、工艺流程、空间布局）——mermaid 画关系，SVG 画实物感；680px 画布 + 浅色底卡统一视觉规范；E 层硬校验缺图违规并触发 AI 补图修复闭环；插图随 Word 导出位图化进 DOCX
+- **学习者画像（Sprint 23）**：根据学习者背景动态调整讲解深度与类比素材，规划 prompt 注入画像
+- **跨课程记忆（Sprint 21）**：结课生成学习档案 + 全局索引，新课程规划时自动注入已掌握内容
+- **结课 roadmap「📍 下一站」（Sprint 22）**：学完后推荐后续学习路线
+- **课程类型自适应章节模板（Sprint 19）**：technical / humanities 分支模板，LLM 规划时自动分类并持久化
+- **课程内容元素约束（Sprint 20）**：engineering 域禁止编程代码块，D 层硬校验
+- CJK 代码块对齐（Sprint 18）：canvas 实测字宽补偿，ASCII 线框图含中文不再错位
+- YAML frontmatter 混合渲染：扁平 key:value 卡片化，复杂结构降级为 Prism 高亮原块
+
+### Fixes
+
+- **LaTeX 兼容层（Sprint 25）**：真 LaTeX 合法但 KaTeX 拒绝的写法（间距命令后裸上下标 `\,^`）在数学提取层自动补空基元，LLM 生成的化学方程式类公式不再以红色源码炸开；主渲染与 DOCX 导出共用同一修复
+- **Word 导出四连修**：CSP 遗漏 blob: 导致 mermaid 回退源码、内联 `<svg>` 不进 DOCX、默认样式、图片尺寸过小（后端统一 540px 显示宽度 ×3 渲染）
+- **Mermaid AI 修复卡死三连修**：LLM 返回空结果显式报错（按钮不再永远卡在加载态）、DeepSeek 思考型模型关闭 thinking（reasoning 耗尽 max_tokens 导致正文 0 字）
+- 章节生成静默卡死双根因修复
+
+### Changed
+
+- learning.css 去重 -4134 行重复规则
+
 ## [0.4.2] - 2026-08-13
 
 ### Fixes

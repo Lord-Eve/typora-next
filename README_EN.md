@@ -46,6 +46,7 @@ Typora Next is a Markdown previewer designed for technical documentation writers
 | **Task List Interaction** | Click checkbox to toggle state and write back to file |
 | **Recent Files** | Quick access to recently opened documents |
 | **YAML Frontmatter** | Card-style metadata rendering |
+| **AI Course Mode** | AI-generated structured courses (outline → chapters → quizzes); engineering/humanities chapters get inline SVG illustrations |
 | **Word Export** | DOCX export with elegant styling |
 | **PDF Export** | Export PDF preserving full rendering styles |
 | **Image Download** | Images, Mermaid SVG, table CSV one-click download |
@@ -181,6 +182,25 @@ Select text to show annotation toolbar:
 - **2 Styles**: highlight background, underline
 - **Notes**: Add text notes to annotations
 - **Auto-persist**: Wrapped in `<mark>` tags, restored after re-render
+
+### AI Course Mode
+
+Enter a topic and AI plans the outline and generates chapters one by one, with per-chapter quizzes, a knowledge graph, Socratic review, and a post-course roadmap. Content shape adapts to course type (technical / engineering / humanities).
+
+#### 🖼️ Inline SVG Illustrations for Engineering Courses (latest highlight)
+
+Every chapter of engineering and humanities courses ships with **at least one inline SVG illustration** — equipment cross-sections, process scenes, spatial layouts. No more walls of text with only abstract flowcharts:
+
+- **Clear division of labor**: Mermaid draws *relationships* (flows, dependencies, comparisons); SVG draws *physicality and space* (reactor cross-sections, furnace structures, production-line layouts)
+- **Unified visual spec**: 680px canvas with a light card background, fully inlined styles (no `<style>` blocks, classes, or CSS variables), readable in both light and dark themes
+- **Hard E-layer validation**: chapters are checked for missing figures after generation; gaps trigger an AI figure-repair loop automatically
+- **Exportable**: figures are rasterized during Word export and embedded as lossless PNGs in the DOCX
+
+Other learning capabilities:
+
+- **Learner persona**: explanation depth and analogies adapt to your background
+- **Cross-course memory**: finishing a course produces a learning profile that future course planning automatically consults
+- **Case study**: select text to trigger a three-part real-world case (situation / application / insight), with follow-up chat
 
 ### Paragraph Translation
 
