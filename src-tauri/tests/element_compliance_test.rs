@@ -127,3 +127,75 @@ fn engineering_flags_tilde_fences() {
     let v = check_chapter("engineering", "a.md", md);
     assert_eq!(v.len(), 1, "tilde fences should also be detected");
 }
+
+// ---------- E 层：内联 SVG 插图（kind 字段 + 缺图检查） ----------
+
+use element_compliance::{check_svg_figure, has_inline_svg, requires_inline_svg};
+
+#[test]
+fn code_block_violations_carry_kind() {
+    let md = "```python\nx=1\n```";
+    let v = check_chapter("engineering", "a.md", md);
+    assert_eq!(v.len(), 1);
+    assert_eq!(v[0].kind, "code-block");
+}
+
+#[test]
+fn requires_inline_svg_matches_d_layer_scope() {
+    assert!(requires_inline_svg("engineering"));
+    assert!(requires_inline_svg("humanities"));
+    assert!(!requires_inline_svg("technical"));
+    assert!(!requires_inline_svg("hybrid"));
+    assert!(!requires_inline_svg("unknown"));
+}
+
+#[test]
+fn has_inline_svg_detects_bare_block_outside_fences() {
+    assert!(has_inline_svg(
+        "正文\n\n<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 680 300\">\n</svg>\n\n正文"
+    ));
+    // 大小写不敏感 + 无属性直接闭合
+    assert!(has_inline_svg("<SVG>"));
+    assert!(has_inline_svg("<svg\n  viewBox=\"0 0 680 300\">"));
+}
+
+#[test]
+fn has_inline_svg_ignores_svg_inside_fences_and_prose() {
+    // 围栏里的 svg 不会渲染，不算
+    assert!(!has_inline_svg("```text\n<svg></svg>\n```"));
+    // 行内 code / 普通文本里的半个标签不算
+    assert!(!has_inline_svg("`<svg` 是 SVG 的开头"));
+    assert!(!has_inline_svg("纯文本没有图"));
+    // 非标签前缀不算（如 <svgx）
+    assert!(!has_inline_svg("<svgx>not an svg</svgx>"));
+}
+
+#[test]
+fn engineering_chapter_without_svg_is_flagged() {
+    let md = "# 01: 电解铝\n\n## 1.1 核心直觉\n\n正文，无图。";
+    let v = check_svg_figure("engineering", "01-x.md", md);
+    assert!(v.is_some(), "engineering 章节缺 SVG 应违规");
+    let v = v.unwrap();
+    assert_eq!(v.kind, "missing-svg-figure");
+    assert_eq!(v.file, "01-x.md");
+    assert_eq!(v.line, 0);
+    assert!(v.detail.contains("SVG"));
+}
+
+#[test]
+fn humanities_chapter_with_svg_is_not_flagged() {
+    let md = "## 1.1 莱比锡时期\n\n<svg viewBox=\"0 0 680 300\">\n</svg>\n\n正文。";
+    assert!(check_svg_figure("humanities", "02-y.md", md).is_none());
+}
+
+#[test]
+fn technical_chapters_never_need_svg() {
+    assert!(check_svg_figure("technical", "01.md", "无图正文").is_none());
+    assert!(check_svg_figure("hybrid", "01.md", "无图正文").is_none());
+}
+
+#[test]
+fn svg_inside_fence_does_not_satisfy_requirement() {
+    let md = "```text\n<svg></svg>\n```";
+    assert!(check_svg_figure("humanities", "01.md", md).is_some());
+}

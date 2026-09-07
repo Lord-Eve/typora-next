@@ -1,8 +1,8 @@
-# Chapter Content Format Specification (v1.3)
+# Chapter Content Format Specification (v1.4)
 
 > Canonical format for AI-generated learning chapters. Sourced from `docs/specs/content-format-spec.md` and embedded here so the agent can read it without leaving the skill.
 
-> **课程类型**：章节按 `course_type`（technical / engineering / humanities / hybrid）分支——技术课用代码/公式/流程图；**engineering 课用真公式/工艺流/结构图/真实工业实例且禁编程代码块**；人文课用具体作品实例/时间线/表格替代凑数伪代码。类型判定与特化规则见 SKILL.md 的「课程类型判定」「类型特化」两节。
+> **课程类型**：章节按 `course_type`（technical / engineering / humanities / hybrid）分支——技术课用代码/公式/流程图；**engineering 课用真公式/工艺流/结构图/真实工业实例/内联 SVG 设备图且禁编程代码块**；人文课用具体作品实例/时间线/表格/内联 SVG 场景空间图替代凑数伪代码。类型判定与特化规则见 SKILL.md 的「课程类型判定」「类型特化」两节。
 
 ## 1. Writing style
 
@@ -10,12 +10,13 @@
 2. **逻辑连贯** (coherent): if there's a next chapter, end with a transition
 3. **有自己的思考** (insightful): don't just list facts — explain *why*
 4. **适度总结** (summarized): brief summaries after key concepts
-5. **可视化** (visual): Mermaid diagrams and tables encouraged — **按内容形态选型**（演变→`timeline`、体系→`mindmap`/`flowchart TB`、流程→`flowchart LR`、交互→`sequenceDiagram`、对比→表格；把生平画成 flowchart 是形态错配）
+5. **可视化** (visual): Mermaid diagrams and tables encouraged — **按内容形态选型**（演变→`timeline`、体系→`mindmap`/`flowchart TB`、流程→`flowchart LR`、交互→`sequenceDiagram`、对比→表格；把生平画成 flowchart 是形态错配）；**实物感/空间感内容**（设备剖面、场景重构、空间布局、构图分析、数量对比图）用**内联 SVG 插图**（见 §7），mermaid 与 SVG 分工不互相替代
 
 Markdown rules:
 - Standard Markdown
 - Math: `$...$` inline, `$$...$$` block — 技术课正常使用；**engineering 课在真有化学/热力学/工艺公式时用（Faraday 定律、电流效率、槽电压、比电耗、刻蚀速率），禁凑数伪公式**；人文课仅内容真需要时出现（如乐理频率比）
 - Code blocks: always tag the language (` ```python `, etc.) — **engineering/humanities 课禁止为凑数虚构代码块（编程代码块/伪代码）**；engineering 用**真实工业实例**（设备/槽型/工艺参数/产地产能）、humanities 用**具体作品实例**（曲目+乐章+时间点 / 作品+年代 / 文献出处）作为"落到实物"的载体；mermaid 图（` ```mermaid `）两类都允许
+- Inline SVG: `<svg>…</svg>` HTML 块**顶格**、前后空行，不包进列表/引用/围栏——engineering/humanities 每章 ≥ 1 个，格式硬约束见 §7 与 `inline-svg-spec.md`
 
 ## 2. Required learning elements per chapter
 
@@ -29,7 +30,7 @@ Markdown rules:
 
 Every chapter MUST follow this numbered section template. The structure is designed to ensure consistency across all chapters in a course.
 
-> 下例展示 **technical 变体**（`$$formula$$` + 代码 + flowchart）。**engineering 变体**把公式保留为真公式 + 工艺/结构 mermaid，把代码槽位换成**真实工业实例块**；**humanities 变体**把 tech 的三个槽位换成：具体作品实例块（见 §3.1）+ 按内容形态选型的可视化（演变用 `timeline`、体系用 `mindmap`/表格；纯赏析小节可以无图）。骨架、callout、表格、quiz 结构所有类型一致。engineering/humanities **禁止编程代码块**。
+> 下例展示 **technical 变体**（`$$formula$$` + 代码 + flowchart）。**engineering 变体**把公式保留为真公式 + 工艺/结构 mermaid，把代码槽位换成**真实工业实例块**，并追加一张**内联 SVG 设备/机理插图**；**humanities 变体**把 tech 的三个槽位换成：具体作品实例块（见 §3.1）+ 按内容形态选型的可视化（演变用 `timeline`、体系用 `mindmap`/表格）+ 一张**内联 SVG 场景/空间插图**。骨架、callout、表格、quiz 结构所有类型一致。engineering/humanities **禁止编程代码块**。
 
 ```markdown
 # {NN}: {chapter title}
@@ -141,7 +142,9 @@ flowchart LR
 > 🎧 **具体作品实例**：《勃兰登堡协奏曲》第二首 第三乐章 2'30'' 处，
 > 赋格主题在各声部依次进入——听到"叠罗汉"般的层次感，就是复调的直观体验。
 
-{时间演变/体系结构用下面形态匹配的可视化；纯赏析可不加}
+{内联 SVG 插图（每章 ≥1）：场景重构 / 空间布局 / 构图分析 / 地理路线——规范与配方见 inline-svg-spec.md §8/§9}
+
+{时间演变/体系结构用下面形态匹配的可视化；演变脉络用 mermaid timeline，不要用 SVG 重复}
 
 ```mermaid
 timeline
@@ -176,6 +179,8 @@ flowchart LR
 
 > 🏭 **真实工业实例**：400kA 预焙阳极电解槽，槽电压约 4.1~4.3V，
 > 吨铝直流电耗约 1.3 万 kWh；阳极电流密度约 0.8 A/cm²。
+
+{内联 SVG 插图（每章 ≥1）：电解槽剖面 / 机理微观示意 / 产线布局 / 能耗对比——规范与配方见 inline-svg-spec.md §6/§7/§9；标注真实工艺参数}
 
 {对比用 markdown 表格：电解 vs 熔盐化学还原 …}
 ```
@@ -309,7 +314,26 @@ If a question text or option text contains Chinese quotes `""`, you MUST either:
 | `concepts[].name` | string | yes | Chinese name displayed in the knowledge graph |
 | `concepts[].depends_on` | array | yes | IDs of upstream concepts from **earlier** chapters; empty `[]` if net-new |
 
-## 7. Change log
+## 7. Inline SVG figures（engineering/humanities 每章 ≥ 1）
+
+Markdown 里直接写块级 `<svg>…</svg>` HTML 画插图——**mermaid 画关系，SVG 画实物感与空间感**（设备/器物剖面、场景重构、空间布局、地理路线、构图分析、数量对比图）。画法规范（画布 680、浅色底卡、全 inline 属性、字宽校准、学科配方、最小示例）见 **[inline-svg-spec.md](inline-svg-spec.md)**，画图前必读。
+
+放置规则：
+
+```markdown
+{一两句正文引入这张图}
+
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 H" width="100%" role="img">
+  …
+</svg>
+
+{图后正文继续展开}
+```
+
+- `<svg` 顶格、前后空行；不包进列表 / 引用 / callout / 代码围栏（否则不渲染）
+- 每章 1~2 张；解释写 Markdown 正文，图内只放标签短语
+
+## 8. Change log
 
 | Date | Version | Change |
 |------|---------|--------|
@@ -317,3 +341,4 @@ If a question text or option text contains Chinese quotes `""`, you MUST either:
 | 2026-06-15 | v1.1 | Embedded into chapter-generation skill (no semantic changes) |
 | 2026-08-22 | v1.2 | 课程类型自适应（technical/humanities/hybrid）：§1 数学/代码规则参数化，§3 增加 humanities 槽位示例，可视化按内容形态选型 |
 | 2026-08-23 | v1.3 | 新增 engineering 域（真实科学与工程/工业过程）：真公式 + 工艺/结构 mermaid + 真实工业实例，禁编程代码块；§3.2 增加 engineering 槽位示例 |
+| 2026-09-06 | v1.4 | 新增内联 SVG 插图槽位：engineering/humanities 每章 ≥ 1（§7 + inline-svg-spec.md），§1 可视化分工 mermaid=关系 / SVG=实物感与空间感 |

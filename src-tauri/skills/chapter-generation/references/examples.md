@@ -271,6 +271,29 @@ flowchart LR
 > 吨铝直流电耗约 1.3 万 kWh，阳极电流密度约 0.8 A/cm²——这些是设计
 > 电解槽产能与能耗的真实量级。
 
+下面这张剖面图把上面这些数字放到结构里看（SVG 规范见 inline-svg-spec.md）：
+
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 280" width="100%" role="img">
+  <title>预焙阳极电解槽剖面示意</title>
+  <desc>槽体、冰晶石熔体、阳极与阴极铝液层的剖面，标注槽电压与温度</desc>
+  <rect x="0" y="0" width="680" height="280" rx="12" fill="#F1EFE8"/>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="#5F5E5A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+  <text x="340" y="46" text-anchor="middle" font-size="14" font-weight="500" fill="#444441">预焙阳极电解槽（剖面）</text>
+  <rect x="150" y="70" width="380" height="160" fill="#D3D1C7" stroke="#888780" stroke-width="1.5"/>
+  <rect x="160" y="88" width="360" height="84" fill="#FAEEDA" stroke="#BA7517" stroke-width="1"/>
+  <rect x="240" y="52" width="36" height="66" fill="#B4B2A9" stroke="#5F5E5A" stroke-width="1"/>
+  <rect x="396" y="52" width="36" height="66" fill="#B4B2A9" stroke="#5F5E5A" stroke-width="1"/>
+  <rect x="160" y="172" width="360" height="48" fill="#B5D4F4" stroke="#185FA5" stroke-width="1"/>
+  <text x="340" y="136" text-anchor="middle" font-size="12" fill="#854F0B">冰晶石熔体 · 约 960 ℃</text>
+  <text x="340" y="202" text-anchor="middle" font-size="12" fill="#0C447C">阴极铝液层</text>
+  <path d="M612 86 L588 76" fill="none" stroke="#5F5E5A" stroke-width="1" marker-end="url(#arrow)"/>
+  <text x="552" y="64" font-size="12" fill="#5F5E5A">槽电压 4.1~4.3 V</text>
+</svg>
+
 > [!concept]
 > **电流效率**
 > 实际产铝量与法拉第定律理论产铝量之比（一般 90%+）。电流效率越低，无用电流
@@ -287,7 +310,8 @@ flowchart LR
 ```
 
 <!-- 三种类型对照（只读参考）：
-technical → 代码示例 + 公式 + flowchart/sequence
-engineering → 真公式 + 工艺/结构 mermaid + 真实工业实例（无编程代码块）★
-humanities → 具体作品实例 + timeline/mindmap（无编程代码块）
+technical → 代码示例 + 公式 + flowchart/sequence（SVG 可选）
+engineering → 真公式 + 工艺/结构 mermaid + 真实工业实例 + 内联 SVG 设备/机理插图（无编程代码块）★
+humanities → 具体作品实例 + timeline/mindmap + 内联 SVG 场景/空间插图（无编程代码块）
+SVG 规范：references/inline-svg-spec.md
 -->

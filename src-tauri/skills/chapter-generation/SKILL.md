@@ -1,6 +1,6 @@
 ---
 name: chapter-generation
-description: Generate a complete learning chapter (Markdown + quiz.json + concepts.json) for one slot in a learning project outline. Template adapts by course type (technical / engineering / humanities / hybrid) — technical courses get code/math/flowcharts, engineering courses get real formulas/process flows/industrial instances and NO pseudocode, humanities courses get concrete works/timelines instead of filler pseudocode. Use when the host prompts "请使用 chapter-generation skill 生成第 N 章" with chapter index/title/duration/concepts. Writes three files via the Write tool. Skill is read-only and self-contained — does not call other skills.
+description: Generate a complete learning chapter (Markdown + quiz.json + concepts.json) for one slot in a learning project outline. Template adapts by course type (technical / engineering / humanities / hybrid) — technical courses get code/math/flowcharts, engineering courses get real formulas/process flows/industrial instances/inline-SVG equipment diagrams and NO pseudocode, humanities courses get concrete works/timelines/inline-SVG scene-or-space illustrations instead of filler pseudocode. Use when the host prompts "请使用 chapter-generation skill 生成第 N 章" with chapter index/title/duration/concepts. Writes three files via the Write tool. Skill is read-only and self-contained — does not call other skills.
 ---
 
 # Chapter Generation
@@ -144,6 +144,7 @@ End with a ONE-SENTENCE summary in a blockquote.
 - ≥ 1 个**代码示例**（带语言标签，illustrating the concept），放在核心直觉之后
 - 内联数学 `$...$` / `$$...$$`，在真正有公式可写时使用
 - ≥ 1 个 **Mermaid 图**，图型按下方选型表选（流程→flowchart、交互→sequence）
+- 内联 SVG 插图**可选**（≤1 张）：概念确实需要"实物感"示意时才用（见 `references/inline-svg-spec.md`）；mermaid 够用就不加
 
 ### humanities（人文课）
 
@@ -151,9 +152,10 @@ End with a ONE-SENTENCE summary in a blockquote.
   - 音乐：曲目 + 乐章 + 可听的时间点（如《勃兰登堡协奏曲》第二首 第三乐章 2'30'' 处赋格主题的进入）
   - 美术/建筑：作品 + 年代 + 看点（如《夜巡》1642 年，光影的戏剧性）
   - 历史/文学：事件/文本 + 出处 + 具体细节
+- **≥ 1 个内联 SVG 插图**：给章节画一张 mermaid 画不出的"实物感/空间感"图——历史场景重构、建筑/剧场/城市空间布局、作品构图分析、地理路线、器物结构（选型与规范见 `references/inline-svg-spec.md` §9）；演变脉络仍用 mermaid `timeline`，不要用 SVG 重复 mermaid 的活
 - **禁止凑数伪代码 / 伪数学**：不得为了满足模板而虚构"把年代判断写成函数"这类无人需要读的代码块。本章内容不涉及编程，就没有代码块。
 - 数学公式仅在内容真需要时出现（如乐理中的频率比）
-- 可视化**按内容形态选型**（见选型表）；mermaid 是可选的——对比表格本身就能满足视觉化需求，纯赏析小节可以没有任何图
+- 可视化**按内容形态选型**（见选型表）；mermaid 是可选的——对比表格本身就能满足视觉化需求，纯赏析小节可以没有 mermaid（SVG 插图不受此限，仍须有）
 
 ### engineering（真实科学与工程 / 工业过程课）
 
@@ -163,11 +165,12 @@ End with a ONE-SENTENCE summary in a blockquote.
   - 工艺参数：实测可查的量（阳极电流密度、刻蚀气体配比 SF₆/C₄F₈、槽电压 4.1~4.3V、吨铝直流电耗）
   - 产地产能：真实工厂/产线规模（山东某铝厂、TSMC 某代工厂工艺节点）
 - **禁止编程代码块 / 伪代码**：本章不涉及编程，就没有 ` ```lang ` 代码块；不要为满足模板虚构代码。可视化走下方选型表——工艺/物料流用 `flowchart LR`，设备/结构层级用 `flowchart TB`，行业演进才用 `timeline`。
+- **≥ 1 个内联 SVG 插图**：给章节画一张 mermaid 画不出的"实物感"图——设备/槽型剖面（阳极/熔体/阴极分层上色 + 部件标注）、机理微观示意、产线/厂区布局、能耗产能对比柱状图（选型与规范见 `references/inline-svg-spec.md` §6/§7/§9）；标注**真实工艺参数**是 engineering 图的灵魂
 - 对比用 markdown 表格（物料·能量衡算、电解 vs 化学还原、干法 vs 湿法刻蚀等）。
 
 ### hybrid（混合课）
 
-按小节的概念属性选：计算/机制类小节用 technical 元素，赏析/脉络类小节用 humanities 元素。同一小节内不要混搭出不协调的组合。
+按小节的概念属性选：计算/机制类小节用 technical 元素，赏析/脉络类小节用 humanities 元素（各自的可视化形态跟着走：工程向小节可用 SVG 剖面/流程场景，人文向小节可用 SVG 场景/空间图）。同一小节内不要混搭出不协调的组合。
 
 ## Mermaid 图示选型表（所有类型通用）
 
@@ -180,6 +183,8 @@ End with a ONE-SENTENCE summary in a blockquote.
 | 对比 | markdown 表格 | 不需要 mermaid |
 
 **选型原则**：图示类型服务内容形态。把生平画成 flowchart、把分类画成 sequenceDiagram 都是形态错配。
+
+**超出 mermaid 能力的内容形态**——设备/器物结构剖面、空间布局与地理路线、场景重构、作品构图分析、数量级对比图——用**内联 SVG**（`<svg>…</svg>` HTML 块）表达，规范见 `references/inline-svg-spec.md`。mermaid 画关系，SVG 画实物感与空间感，两者不要互相替代。
 
 ## MUST-VERIFY checklist (run before returning)
 
@@ -206,9 +211,9 @@ Run through this with `Read` after writing. If anything fails, rewrite the file.
 
 **类型条件项（按判定的 course_type 只检查对应一行）:**
 - [ ] **technical**: ≥ 1 个代码示例且带语言标签；≥ 1 个 mermaid 图且图型匹配内容形态
-- [ ] **engineering**: ≥ 1 处**真公式**（化学/热力学/工艺）；≥ 1 处**真实工业实例**（设备/槽型/工艺参数/产地产能）；**零编程代码块、零伪代码**（除 mermaid/text/tex 外的 ` ```lang ` 一律不应出现）；工艺/结构 mermaid 图型匹配内容形态（工艺流→flowchart LR、结构→flowchart TB）
-- [ ] **humanities**: ≥ 1 处具体作品实例（具体到乐章/时间点/年代/出处）；**无凑数伪代码**（不虚构与内容无关的代码块）；出现的 mermaid 图型匹配内容形态（演变→timeline、体系→mindmap/flowchart TB）
-- [ ] **hybrid**: 计算类小节含代码/公式，赏析类小节含具体作品实例，无混乱混搭
+- [ ] **engineering**: ≥ 1 处**真公式**（化学/热力学/工艺）；≥ 1 处**真实工业实例**（设备/槽型/工艺参数/产地产能）；**零编程代码块、零伪代码**（除 mermaid/text/tex 外的 ` ```lang ` 一律不应出现）；工艺/结构 mermaid 图型匹配内容形态（工艺流→flowchart LR、结构→flowchart TB）；≥ 1 个内联 SVG 插图（顶格、带浅色底卡、全 inline 属性，符合 `inline-svg-spec.md`）
+- [ ] **humanities**: ≥ 1 处具体作品实例（具体到乐章/时间点/年代/出处）；**无凑数伪代码**（不虚构与内容无关的代码块）；出现的 mermaid 图型匹配内容形态（演变→timeline、体系→mindmap/flowchart TB）；≥ 1 个内联 SVG 插图（顶格、带浅色底卡、全 inline 属性，符合 `inline-svg-spec.md`）
+- [ ] **hybrid**: 计算类小节含代码/公式，赏析类小节含具体作品实例，无混乱混搭；SVG 插图按小节属性取用（不强制）
 
 ## 选择题质量硬约束（MANDATORY — 适用于 md 内联 quiz 与 quiz.json）
 
@@ -276,6 +281,7 @@ Convert the chapter title to a kebab-like slug:
 - **[content-format.md](references/content-format.md)** — full Markdown/quiz.json/concepts.json schema. READ THIS before writing.
 - **[examples.md](references/examples.md)** — worked examples (technical + humanities fragments) of a complete chapter + quiz.json + concepts.json. Read if you want a concrete template to mirror.
 - **[callout-format-spec.md](references/callout-format-spec.md)** — **EXACT** format for `[!question]`, `[!quiz]`, `[!answer]` callouts, including nesting, collapsible markers, and option formatting. Read this before writing the learning elements.
+- **[inline-svg-spec.md](references/inline-svg-spec.md)** — 内联 SVG 插图规范（engineering/humanities 必读）：何时画 SVG 而非 mermaid、画布/配色/兼容性硬约束、学科配方与最小示例。画 SVG 前必读。
 
 ## Style continuity
 

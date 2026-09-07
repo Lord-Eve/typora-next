@@ -539,6 +539,12 @@ pub async fn plan_course_llm(
     goal: String,
     level: String,
     hours: u32,
+    // Sprint 21 v2: 记忆面板的课程级选中集。None = 旧调用方全量注入；
+    // Some(paths) = 只注入选中课程；Some([]) = 用户取消全部勾选，不注入。
+    memory_courses: Option<Vec<String>>,
+    // Sprint 23: 画像段落门控（面板明细区的「本次规划使用画像」开关）。
+    // None = 默认参与；false = 本次不注入画像。只读缓存文件，零新增 LLM 调用。
+    persona_enabled: Option<bool>,
     app_handle: AppHandle,
 ) -> Result<Value, String> {
     log::info!(
@@ -573,10 +579,30 @@ pub async fn plan_course_llm(
         });
 
     // Sprint 21: inject cross-course learner memory (best-effort — missing
-    // index / corrupt profiles degrade to None, i.e. the pre-Sprint-21 prompt)
-    let learner_ctx = crate::learner_profile::learner_index_path()
-        .and_then(|p| crate::learner_profile::aggregate_learner_context(&p));
-    let prompt = build_plan_prompt(&goal, &level, hours, learner_ctx.as_deref());
+    // index / corrupt profiles degrade to None, i.e. the pre-Sprint-21 prompt).
+    // v2：按记忆面板的选中集过滤（选中过滤发生在 MAX_COURSES 截断之前）；
+    // 空选中集直接 None——不读盘、不改索引/档案。
+    let learner_ctx = match &memory_courses {
+        Some(paths) if paths.is_empty() => {
+            log::info!("[plan_llm] learner memory disabled: empty selection");
+            None
+        }
+        Some(paths) => crate::learner_profile::learner_index_path()
+            .and_then(|p| crate::learner_profile::aggregate_selected_learner_context(&p, paths)),
+        None => crate::learner_profile::learner_index_path()
+            .and_then(|p| crate::learner_profile::aggregate_learner_context(&p)),
+    };
+    // Sprint 23: 画像段落——read-only 缓存注入，缺文件/损坏/关闭 → None
+    // （prompt 与 Sprint 21 v2 字节级一致）。规划链路绝不调 LLM 重建画像。
+    let persona_section = if persona_enabled.unwrap_or(true) {
+        crate::learner_profile::read_persona()
+            .and_then(|p| crate::persona_prompt::render_persona_block(&p))
+    } else {
+        log::info!("[plan_llm] persona disabled for this run");
+        None
+    };
+    let persona_arg = persona_section.as_deref();
+    let prompt = build_plan_prompt(&goal, &level, hours, learner_ctx.as_deref(), persona_arg);
 
     // Call LLM via ureq (mirrors explain_selection pattern)
     // 8192: 2048 truncated long outlines mid-JSON (deepseek EOF-at-line-47
@@ -599,11 +625,7 @@ pub async fn plan_course_llm(
         }
         crate::AiProvider::Openai => {
             let url = format!("{}/v1/chat/completions", base_url.trim_end_matches('/'));
-            let req = serde_json::json!({
-                "model": model,
-                "max_tokens": 8192,
-                "messages": [{"role": "user", "content": prompt}]
-            });
+            let req = crate::llm_body::openai_chat_body(&model, 8192, &prompt, &base_url);
             let resp = ureq::post(&url)
                 .set("Content-Type", "application/json")
                 .set("Authorization", &format!("Bearer {}", api_key))
@@ -640,6 +662,199 @@ pub async fn plan_course_llm(
             .unwrap_or(0)
     );
     Ok(outline)
+}
+
+// ============================================
+// Sprint 21 v2: rank_learner_courses — relevance ranking for the
+// memory panel. Thin ureq call over the pure prompt/parse module
+// (memory_rank.rs); any failure surfaces as Err and the frontend
+// degrades to manual selection — ranking is an enhancement only.
+// ============================================
+
+/// One-shot LLM text completion (shared plumbing for small JSON-out tasks).
+/// Mirrors the config resolution of plan_course_llm.
+fn llm_complete_text(
+    prompt: &str,
+    max_tokens: u32,
+    app_handle: &AppHandle,
+) -> Result<String, String> {
+    let config = crate::get_config(app_handle.clone()).map_err(|e| e.to_string())?;
+    let api_key = config
+        .api_key
+        .filter(|k| !k.is_empty())
+        .ok_or("未设置 API Key，请在设置中配置")?;
+    let provider = config.ai_provider.unwrap_or_default();
+    let base_url = config
+        .ai_base_url
+        .filter(|u| !u.is_empty())
+        .unwrap_or_else(|| match provider {
+            crate::AiProvider::Anthropic => "https://api.anthropic.com".to_string(),
+            crate::AiProvider::Openai => "https://api.openai.com".to_string(),
+        });
+    let model = config
+        .model
+        .filter(|m| !m.is_empty())
+        .unwrap_or_else(|| match provider {
+            crate::AiProvider::Anthropic => "claude-3-5-haiku-20241022".to_string(),
+            crate::AiProvider::Openai => "gpt-4o-mini".to_string(),
+        });
+
+    let (response, is_anthropic) = match provider {
+        crate::AiProvider::Anthropic => {
+            let url = format!("{}/v1/messages", base_url.trim_end_matches('/'));
+            let req = serde_json::json!({
+                "model": model,
+                "max_tokens": max_tokens,
+                "messages": [{"role": "user", "content": prompt}]
+            });
+            let resp = ureq::post(&url)
+                .set("Content-Type", "application/json")
+                .set("x-api-key", &api_key)
+                .set("anthropic-version", "2023-06-01")
+                .send_json(req)
+                .map_err(|e| format!("API 请求失败: {}", e))?;
+            (resp, true)
+        }
+        crate::AiProvider::Openai => {
+            let url = format!("{}/v1/chat/completions", base_url.trim_end_matches('/'));
+            let req = crate::llm_body::openai_chat_body(&model, max_tokens, prompt, &base_url);
+            let resp = ureq::post(&url)
+                .set("Content-Type", "application/json")
+                .set("Authorization", &format!("Bearer {}", api_key))
+                .send_json(req)
+                .map_err(|e| format!("API 请求失败: {}", e))?;
+            (resp, false)
+        }
+    };
+
+    let json: Value = response
+        .into_json()
+        .map_err(|e| format!("解析响应失败: {}", e))?;
+    let raw = if is_anthropic {
+        json["content"][0]["text"].as_str()
+    } else {
+        json["choices"][0]["message"]["content"].as_str()
+    }
+    .ok_or("响应中没有内容")?;
+    Ok(raw.to_string())
+}
+
+/// Rank indexed completed courses by relevance to a learning goal.
+/// Returns `[{course_path, score, reason}]` score-desc; empty array when
+/// nothing is indexed. Defensive parse drops hallucinated paths.
+#[tauri::command]
+pub async fn rank_learner_courses(goal: String, app_handle: AppHandle) -> Result<Value, String> {
+    let goal = goal.trim().to_string();
+    if goal.is_empty() {
+        return Err("学习目标为空".to_string());
+    }
+    let Some(index_path) = crate::learner_profile::learner_index_path() else {
+        return Ok(Value::Array(vec![]));
+    };
+    let entries = crate::learner_profile::list_course_entries(&index_path);
+    if entries.is_empty() {
+        return Ok(Value::Array(vec![]));
+    }
+    let known: Vec<String> = entries
+        .iter()
+        .filter_map(|e| {
+            e.get("course_path")
+                .and_then(|v| v.as_str())
+                .map(String::from)
+        })
+        .collect();
+
+    let prompt = crate::memory_rank::build_rank_prompt(&goal, &entries);
+    log::info!(
+        "[memory_rank] ranking {} courses for goal_len={}",
+        entries.len(),
+        goal.len()
+    );
+    let raw = llm_complete_text(&prompt, 1024, &app_handle)?;
+    let ranked = crate::memory_rank::parse_rank_response(&raw, &known);
+    log::info!("[memory_rank] parsed {} valid rankings", ranked.len());
+    Ok(Value::Array(ranked))
+}
+
+// ============================================
+// Sprint 23: get_learner_persona — derived persona (domains + analogy bank).
+// ensure-on-open semantics: fingerprint over persona inputs decides rebuild;
+// the plan path never rebuilds (zero added latency there). LLM aggregation
+// failure degrades to rule_persona — this command never Errs on weak models.
+// ============================================
+
+fn persona_summary(persona: &Value, stale_rebuilt: bool) -> Value {
+    let domains = persona
+        .get("domains")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let bank = persona
+        .get("analogy_bank")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    serde_json::json!({
+        "ready": !domains.is_empty(),
+        "source": persona.get("source").and_then(|v| v.as_str()).unwrap_or("rule"),
+        "domains": domains,
+        "analogy_count": bank.len(),
+        "analogy_bank": bank,
+        "generated_at": persona.get("generated_at").and_then(|v| v.as_u64()).unwrap_or(0),
+        "summary_line": format!("{} 个领域 · {} 个类比素材", domains.len(), bank.len()),
+        "stale_rebuilt": stale_rebuilt,
+    })
+}
+
+#[tauri::command]
+pub async fn get_learner_persona(
+    force: Option<bool>,
+    app_handle: AppHandle,
+) -> Result<Value, String> {
+    let Some(index_path) = crate::learner_profile::learner_index_path() else {
+        return Ok(serde_json::json!({ "ready": false }));
+    };
+    let courses = crate::learner_profile::collect_persona_inputs(&index_path);
+    if courses.is_empty() {
+        return Ok(serde_json::json!({ "ready": false }));
+    }
+    let fp = crate::persona_prompt::fnv1a_hex(&serde_json::to_string(&courses).unwrap_or_default());
+    let force = force.unwrap_or(false);
+
+    if !force {
+        if let Some(existing) = crate::learner_profile::read_persona() {
+            if existing.get("fingerprint").and_then(|v| v.as_str()) == Some(fp.as_str()) {
+                return Ok(persona_summary(&existing, false));
+            }
+        }
+    }
+
+    // Rebuild. A degraded (rule) persona carries the current fingerprint too,
+    // so it is NOT retried automatically — the panel's 重建 button (force) or
+    // a genuinely changed course set will trigger a fresh LLM attempt.
+    let now = chrono::Utc::now().timestamp().max(0) as u64;
+    let prompt = crate::persona_prompt::build_persona_prompt(&courses);
+    log::info!(
+        "[persona] rebuilding for {} courses (force={})",
+        courses.len(),
+        force
+    );
+    let mut persona = match llm_complete_text(&prompt, 1500, &app_handle) {
+        Ok(raw) => crate::persona_prompt::parse_persona_response(&raw, &courses),
+        Err(e) => {
+            log::warn!("[persona] LLM aggregation failed: {e}");
+            None
+        }
+    };
+    if persona.is_none() {
+        log::info!("[persona] falling back to rule persona");
+        persona = Some(crate::persona_prompt::rule_persona(&courses));
+    }
+    let mut persona = persona.unwrap();
+    persona["fingerprint"] = serde_json::json!(fp);
+    persona["generated_at"] = serde_json::json!(now);
+    let _ = crate::learner_profile::write_persona(&persona);
+    Ok(persona_summary(&persona, true))
 }
 
 // ============================================
@@ -789,11 +1004,7 @@ pub async fn generate_roadmap(
         }
         crate::AiProvider::Openai => {
             let url = format!("{}/v1/chat/completions", base_url.trim_end_matches('/'));
-            let req = serde_json::json!({
-                "model": model,
-                "max_tokens": 2048,
-                "messages": [{"role": "user", "content": prompt}]
-            });
+            let req = crate::llm_body::openai_chat_body(&model, 2048, &prompt, &base_url);
             let resp = ureq::post(&url)
                 .set("Content-Type", "application/json")
                 .set("Authorization", &format!("Bearer {}", api_key))
@@ -952,7 +1163,7 @@ pub async fn generate_chapters(
                         Err(e) => log::warn!("[ai_agent] quiz-repair best-effort failed: {}", e),
                     }
                 }
-                // D 层（元素合规）：engineering/humanities 课程扫出编程代码块 → 一轮 element-repair。
+                // D/E 层（元素合规）：engineering/humanities 课程扫出编程代码块或缺 SVG 插图 → 一轮 element-repair。
                 // best-effort——重写失败不影响生成主流程。
                 if matches!(
                     elem_course_type.as_str(),
@@ -969,7 +1180,7 @@ pub async fn generate_chapters(
                             "agent-event",
                             serde_json::json!({
                                 "type": "status",
-                                "data": { "message": format!("检测到 {} 处不应出现的代码块元素，自动重写中…", n) }
+                                "data": { "message": format!("检测到 {} 处元素合规问题（不当代码块/缺 SVG 插图），自动修复中…", n) }
                             }),
                         );
                         let elem_args = serde_json::json!({
@@ -990,7 +1201,7 @@ pub async fn generate_chapters(
                                     "agent-event",
                                     serde_json::json!({
                                         "type": "status",
-                                        "data": { "message": "不当代码块已重写为学科化表达" }
+                                        "data": { "message": "元素合规修复完成（代码块已学科化 / 缺失插图已补）" }
                                     }),
                                 );
                             }
@@ -1077,8 +1288,10 @@ fn collect_quiz_repairs(project_path: &str) -> Vec<serde_json::Value> {
     repairs
 }
 
-/// D 层：扫描项目内 `{NN}-*.md`，对 engineering/humanities 课程找出编程代码块违规。
-/// 返回可直接喂给 `element-repair` 的 repair 清单；失败/无违规 → 空。
+/// D/E 层：扫描项目内 `{NN}-*.md`，对 engineering/humanities 课程收集两类
+/// 元素合规违规——编程代码块（D 层 check_chapter）与缺失内联 SVG 插图
+/// （E 层 check_svg_figure）。返回可直接喂给 `element-repair` 的 repair
+/// 清单；失败/无违规 → 空。
 fn collect_element_violations(project_path: &str, course_type: &str) -> Vec<serde_json::Value> {
     let dir = std::path::Path::new(project_path);
     let entries = match std::fs::read_dir(dir) {
@@ -1095,7 +1308,12 @@ fn collect_element_violations(project_path: &str, course_type: &str) -> Vec<serd
             Ok(c) => c,
             Err(_) => continue,
         };
-        let violations = crate::element_compliance::check_chapter(course_type, &name, &content);
+        let mut violations = crate::element_compliance::check_chapter(course_type, &name, &content);
+        if let Some(svg_violation) =
+            crate::element_compliance::check_svg_figure(course_type, &name, &content)
+        {
+            violations.push(svg_violation);
+        }
         if violations.is_empty() {
             continue;
         }
@@ -1105,6 +1323,7 @@ fn collect_element_violations(project_path: &str, course_type: &str) -> Vec<serd
                 .iter()
                 .map(|v| {
                     serde_json::json!({
+                        "kind": v.kind,
                         "lang": v.lang,
                         "line": v.line,
                         "detail": v.detail
@@ -2297,11 +2516,7 @@ pub async fn explain_selection(
         }
         crate::AiProvider::Openai => {
             let url = format!("{}/v1/chat/completions", base_url.trim_end_matches('/'));
-            let req = serde_json::json!({
-                "model": model,
-                "max_tokens": 2048,
-                "messages": [{"role": "user", "content": prompt}]
-            });
+            let req = crate::llm_body::openai_chat_body(&model, 2048, &prompt, &base_url);
             let resp = ureq::post(&url)
                 .set("Content-Type", "application/json")
                 .set("Authorization", &format!("Bearer {}", api_key))

@@ -112,7 +112,8 @@ async function loadPiSDK() {
 // ============================================
 
 /** Map AppConfig (ai_provider/ai_base_url/api_key/model) to a temp models.json.
- *  apiKey is referenced by ENV VAR NAME — the key itself never touches disk. */
+ *  apiKey is referenced via ENV VAR (bare name on pi ≤ 0.74, $NAME on ≥ 0.84) —
+ *  the key itself never touches disk. */
 export function _writeTempModelsJson(config) {
   const provider = (config?.ai_provider || 'anthropic').toLowerCase();
   const isAnthropic = provider !== 'openai';
@@ -127,6 +128,9 @@ export function _writeTempModelsJson(config) {
   const modelId = (config?.model || '').trim() || (isAnthropic ? 'claude-3-5-haiku-20241022' : 'gpt-4o-mini');
   const envKey = `TYPORA_PI_KEY_${process.pid}`;
   if (config?.api_key) process.env[envKey] = config.api_key;
+  // pi ≥ 0.84 只插值 $VAR/${VAR} 语法，裸名会被当作字面 key（401 报 key 尾部 = pid 尾部）；
+  // pi ≤ 0.74 用裸 env var 名。按已加载 SDK 的代际选择引用形式。
+  const apiKeyRef = (typeof _pi?.ModelRuntime?.create === 'function') ? `$${envKey}` : envKey;
 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'typora-pi-'));
   const modelsPath = path.join(dir, 'models.json');
@@ -137,14 +141,17 @@ export function _writeTempModelsJson(config) {
         // Probe-verified mapping (2026-08-04): anthropic-compatible endpoint
         // needs anthropic-messages; openai-completions 404s on such proxies.
         api: isAnthropic ? 'anthropic-messages' : 'openai-completions',
-        apiKey: envKey,
+        apiKey: apiKeyRef,
         models: [{
           id: modelId,
           name: modelId,
           reasoning: false,
           input: ['text'],
           contextWindow: 128000,
-          maxTokens: 8192
+          // "不限制 token"：pi 总会发送 model.maxTokens（缺省回落 16384，无省略通道），
+          // 每请求由 clampMaxTokensToContext 夹到 contextWindow−输入−4096。给一个恒大于
+          // 剩余窗口的值（服务端实测接受 131072→HTTP 200），实际输出上限即上下文余量。
+          maxTokens: 131072
         }]
       }
     }
@@ -182,9 +189,23 @@ async function _runPiTurnReal(opts) {
   let session = null;
   let refreshed = false;
   try {
-    const authStorage = pi.AuthStorage.create(path.join(tmp.dir, 'auth.json'));
-    const modelRegistry = pi.ModelRegistry.create(authStorage, tmp.modelsPath);
-    const model = modelRegistry.find(tmp.providerId, tmp.modelId);
+    // pi SDK 两代 API 兼容（2026-09-03：全局包 0.74.2→0.84.3 重构后 AuthStorage
+    // 不再导出、ModelRegistry.create 移除，init 全线崩溃 "Cannot read properties
+    // of undefined (reading 'create')"）。0.84+ 走 ModelRuntime.create；旧版回退原路径。
+    const authPath = path.join(tmp.dir, 'auth.json');
+    let model, modelRuntime, authStorage, modelRegistry;
+    if (typeof pi.ModelRuntime?.create === 'function') {
+      // pi ≥ 0.84：ModelRuntime 是 model/auth 的唯一入口（authPath 指文件、
+      // modelsPath 指我们的临时 models.json；默认无网络刷新）
+      modelRuntime = await pi.ModelRuntime.create({ authPath, modelsPath: tmp.modelsPath });
+      modelRegistry = new pi.ModelRegistry(modelRuntime);
+      model = modelRegistry.find(tmp.providerId, tmp.modelId);
+    } else {
+      // pi ≤ 0.74 旧 API
+      authStorage = pi.AuthStorage.create(authPath);
+      modelRegistry = pi.ModelRegistry.create(authStorage, tmp.modelsPath);
+      model = modelRegistry.find(tmp.providerId, tmp.modelId);
+    }
     if (!model) throw new Error(`model not resolvable: ${tmp.providerId}/${tmp.modelId}`);
 
     // agentDir required: DefaultPackageManager.addAutoDiscoveredResources
@@ -210,8 +231,13 @@ async function _runPiTurnReal(opts) {
     ({ session } = await pi.createAgentSession({
       cwd: workDir,
       model,
-      authStorage,
-      modelRegistry,
+      // pi ≥0.84 新增 thinkingLevel，默认 'medium'：reasoning 模型（deepseek-v4-flash）
+      // 的思考 token 会吃掉整个 maxTokens 输出预算，正文/toolCall 在截断前就发不出
+      // （2026-09-03 章节生成全停 stopReason=length、不写文件的根因）。0.74 无 thinking
+      // 语义，显式 off 恢复旧行为。
+      thinkingLevel: 'off',
+      // 0.84+ 用 modelRuntime；旧版用 authStorage/modelRegistry（undefined 字段被忽略）
+      ...(modelRuntime ? { modelRuntime } : { authStorage, modelRegistry }),
       resourceLoader: loader,
       sessionManager,
       tools: tools || [],
@@ -235,6 +261,10 @@ async function _runPiTurnReal(opts) {
 
     // Authoritative output: last assistant message's text blocks
     const lastAssistant = [...session.messages].reverse().find(m => m.role === 'assistant');
+    if (lastAssistant?.stopReason === 'length') {
+      // maxTokens 已按上下文余量放开；走到这里说明整窗打满，重试也无法变长
+      throw new Error(`model output hit context limit (stopReason=length, model=${tmp.modelId})`);
+    }
     const output = lastAssistant?.content
       ?.filter(b => b.type === 'text')
       .map(b => b.text)
@@ -598,23 +628,40 @@ export async function repairQuizQuality(queryFnUnused, config, args) {
 }
 
 /**
- * 构造 element-repair 的定向重写 prompt（纯函数，可单测）。
- * 只删/改被标记的编程代码块，其余内容原样保留。空 repairs 返回空串。
+ * 构造 element-repair 的定向修复 prompt（纯函数，可单测）。
+ * 只修复 repairs 里列出的违规处，其余内容原样保留。
+ * 按 violation.kind 分派：code-block → 学科化重写；missing-svg-figure → 补一张
+ * 内联 SVG 插图（先 Read inline-svg-spec.md）。空 repairs 返回空串。
  */
 export function buildElementRepairPrompt(project_path, repairs) {
   if (!project_path || !Array.isArray(repairs) || !repairs.length) {
     return '';
   }
-  return `刚生成的章节包含不应用于本课程类型的编程代码块，请定向修复。
+  const hasSvgRepairs = repairs.some(
+    (r) => Array.isArray(r.violations) && r.violations.some((v) => v && v.kind === 'missing-svg-figure')
+  );
+  const svgSpecRead = hasSvgRepairs
+    ? `涉及补图的文件，先 Read 规范再动手：${JSON.stringify(`${project_path}/.pi/skills/chapter-generation/references/inline-svg-spec.md`)}（读不到再试 ${JSON.stringify(`${project_path}/.claude/skills/chapter-generation/references/inline-svg-spec.md`)}）。
+`
+    : '';
+  const svgMinimum = hasSvgRepairs
+    ? `   - 补图最低要求（规范读不到时兜底）：<svg> 顶格、前后空行；viewBox="0 0 680 H" + width="100%"；第一个 rect 铺满浅色底卡 #F1EFE8；颜色全部 inline 写死；禁 class/style 块/var()/script/渐变；文字 ≥11px、字重 400/500；解释文字留在 markdown 正文
+`
+    : '';
+  return `刚生成的章节未通过元素合规校验（不当代码块 / 缺失内联 SVG 插图），请定向修复。
 - project_path: ${JSON.stringify(project_path)}
 - repairs: ${JSON.stringify(repairs)}
 
-对每个 file：
+${svgSpecRead}对每个 file：
 1. 用 Read 读取 {project_path}/{file}
-2. 只处理 violations 里列出的那个编程代码块（给定行号 lang）：
-   - engineering 课：删掉该代码块，改用**真实公式 + 工艺/结构 mermaid 图 + 真实工业实例（设备型号/槽型/工艺参数/产地产能）**写同一内容
-   - humanities 课：删掉该代码块，改用**具体作品实例（曲目+乐章+时间点 / 作品+年代 / 文献出处）**写同一内容
-3. 用 Write 写回整个文件：除该处代码块改为学科化表达外，**其余内容原样保留，一字不改**。
+2. 只处理 violations 里列出的每一处违规，按 kind 分派：
+   - kind "code-block"（给定行号 lang）：只删/改该编程代码块——
+     * engineering 课：删掉该代码块，改用**真实公式 + 工艺/结构 mermaid 图 + 真实工业实例（设备型号/槽型/工艺参数/产地产能）**写同一内容
+     * humanities 课：删掉该代码块，改用**具体作品实例（曲目+乐章+时间点 / 作品+年代 / 文献出处）**写同一内容
+   - kind "missing-svg-figure"：该章一张内联 SVG 插图都没有——按 detail 给定的插图方向，在正文最合适的小节（核心直觉/实例段之后）插入 1 张学科相关的 SVG 插图：
+${svgMinimum}     * 内容形态参考：engineering 用设备/槽型剖面（标注真实工艺参数）、机理示意、产线布局、能耗对比；humanities 用场景重构、空间布局、地理路线、构图分析、器物结构
+     * 图前加一两句 markdown 正文引入，图后正文继续展开；不要用 SVG 重复 mermaid 能画的关系图
+3. 用 Write 写回整个文件：除上述违规处修复外，**其余内容原样保留，一字不改**。
 
 全部修复后回复一行总结。`;
 }
@@ -1014,9 +1061,21 @@ export const exploreChat = chatWithAgent;
 // ============================================
 // Main
 // ============================================
+// API key must never reach the log file: argv[1] is the config JSON.
+function _redactArgv(args) {
+  return args.map((a, i) => {
+    if (i !== 1) return a;
+    try {
+      const o = JSON.parse(a);
+      if (o?.config?.api_key) o.config.api_key = '***';
+      return JSON.stringify(o);
+    } catch { return a; }
+  });
+}
+
 async function main() {
   const args = process.argv.slice(2);
-  log('info', 'Agent bridge (pi kernel) started', { argv: args });
+  log('info', 'Agent bridge (pi kernel) started', { argv: _redactArgv(args) });
 
   if (args.length < 2) {
     emitError('用法: node agent-bridge.mjs <stage> <config_json>');
