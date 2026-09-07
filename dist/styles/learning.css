@@ -8,8 +8,8 @@
    ============================================ */
 
 .learning-modal {
-  max-width: 560px;
-  width: 90%;
+  max-width: 780px;
+  width: 92%;
 }
 
 .learning-modal .modal-body {
@@ -115,7 +115,19 @@
   margin-top: 10px;
 }
 
-/* Sprint 21: 跨课记忆提示行（创建课程对话框） */
+/* Sprint 21 v2: 创建对话框左右两栏（左表单 + 右学习历史选择面板） */
+.learning-input-cols {
+  display: flex;
+  gap: 16px;
+  align-items: stretch;
+}
+
+.learning-input-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Sprint 21: 跨课记忆（现为右栏课程级选择面板；保留旧 class 作为容器皮肤） */
 .learner-context-hint {
   padding: 8px 12px;
   background: var(--color-bg-secondary, #f5f5f7);
@@ -123,8 +135,260 @@
   border-radius: 6px;
   color: var(--color-text-secondary, #666);
   font-size: 12px;
-  margin-top: 12px;
   line-height: 1.5;
+}
+
+.learner-memory-col {
+  flex: 0 0 252px;
+  width: 252px;
+  align-self: flex-start;
+  margin-top: 26px; /* 与左侧第一个输入框顶部对齐（避开 label 行） */
+}
+
+/* 窄窗口回退上下排布 */
+@media (max-width: 640px) {
+  .learning-input-cols { flex-direction: column; }
+  .learner-memory-col { flex: 1 1 auto; width: auto; margin-top: 12px; }
+}
+
+.learner-memory-head {
+  font-weight: 600;
+  color: var(--color-text, #333);
+  margin-bottom: 6px;
+}
+
+.learner-memory-sub {
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--color-text-secondary, #999);
+  margin-left: 4px;
+}
+
+.learner-memory-help {
+  font-size: 10px;
+  line-height: 1.55;
+  color: var(--color-text-secondary, #8a8a92);
+  margin: -2px 0 7px;
+}
+
+/* Sprint 23: 学习者画像摘要行与明细（位于面板帮助文案与搜索框之间） */
+.learner-persona-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  user-select: none;
+  padding: 6px 8px;
+  margin: 0 -4px 6px;
+  border-radius: 6px;
+  background: rgba(79, 70, 229, 0.06);
+  color: var(--color-text, #333);
+  font-size: 11.5px;
+}
+
+.learner-persona-row:hover {
+  background: rgba(79, 70, 229, 0.11);
+}
+
+.learner-persona-row .lpr-caret {
+  margin-left: auto;
+  color: var(--color-text-secondary, #999);
+  font-size: 9px;
+  transition: transform 0.15s;
+}
+
+.learner-persona-row.open .lpr-caret {
+  transform: rotate(180deg);
+}
+
+.learner-persona-detail {
+  margin: 0 -4px 8px;
+  padding: 8px;
+  background: var(--color-bg, #fff);
+  border: 1px solid var(--color-border, #e0e0e4);
+  border-radius: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.learner-persona-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 7px;
+}
+
+.learner-persona-chip {
+  font-size: 10.5px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(79, 70, 229, 0.09);
+  color: var(--color-accent, #4f46e5);
+}
+
+.learner-persona-chip small {
+  color: var(--color-text-secondary, #999);
+  margin-left: 3px;
+}
+
+.learner-persona-samples,
+.learner-persona-sources {
+  font-size: 10.5px;
+  color: var(--color-text-secondary, #666);
+  line-height: 1.6;
+  margin-bottom: 6px;
+}
+
+.learner-persona-samples b {
+  color: var(--color-text, #333);
+  font-weight: 600;
+}
+
+.learner-persona-rule {
+  display: inline-block;
+  font-size: 10px;
+  color: #b45309;
+  background: #fef3c7;
+  padding: 1px 6px;
+  border-radius: 8px;
+  margin-bottom: 4px;
+}
+
+.learner-persona-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px dashed var(--color-border, #e0e0e4);
+  padding-top: 7px;
+}
+
+.learner-persona-actions label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--color-text, #333);
+}
+
+.learner-persona-rebuild {
+  font-size: 10.5px;
+  padding: 2px 8px;
+  border: 1px solid var(--color-border, #d0d0d6);
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--color-text-secondary, #666);
+  margin-left: auto;
+}
+
+.learner-persona-rebuild:hover {
+  border-color: var(--color-accent, #4f46e5);
+  color: var(--color-accent, #4f46e5);
+}
+
+.learner-persona-rebuild:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.learner-memory-search {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 5px 8px;
+  border: 1px solid var(--color-border, #e0e0e4);
+  border-radius: 5px;
+  font-size: 12px;
+  background: var(--color-bg, #fff);
+  color: var(--color-text, #333);
+  margin-bottom: 6px;
+}
+
+.learner-memory-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  margin: 2px 0 6px;
+  color: var(--color-text-secondary, #666);
+}
+
+.learner-memory-reject {
+  border: 1px solid var(--color-border, #d0d0d6);
+  background: transparent;
+  border-radius: 4px;
+  font-size: 11px;
+  padding: 1px 7px;
+  cursor: pointer;
+  color: var(--color-text-secondary, #666);
+  flex: none;
+}
+
+.learner-memory-reject:hover {
+  border-color: var(--color-accent, #4f46e5);
+  color: var(--color-accent, #4f46e5);
+}
+
+.learner-memory-list {
+  overflow-y: auto;
+  min-height: 40px;
+  max-height: 250px;
+}
+
+.learner-memory-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 5px 6px;
+  border-radius: 5px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.learner-memory-row:hover {
+  background: var(--color-bg-hover, rgba(0, 0, 0, 0.04));
+}
+
+.learner-memory-row.recommended {
+  background: rgba(79, 70, 229, 0.07);
+}
+
+.learner-memory-row input[type="checkbox"] {
+  flex: none;
+  margin-top: 2px;
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  accent-color: var(--color-accent, #4f46e5);
+}
+
+.learner-memory-row .lmr-main { min-width: 0; }
+
+.learner-memory-row .lmr-name {
+  display: block;
+  color: var(--color-text, #333);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.learner-memory-row .lmr-meta {
+  display: block;
+  font-size: 10px;
+  color: var(--color-text-secondary, #999);
+}
+
+.learner-memory-row .lmr-reason {
+  font-size: 10px;
+  color: var(--color-accent, #4f46e5);
+  margin-top: 2px;
+}
+
+.learner-memory-empty {
+  font-size: 11px;
+  color: var(--color-text-secondary, #999);
+  padding: 8px 4px;
 }
 
 /* Sprint 22: 📍 下一站 roadmap（知识图谱仪表盘，完结课程） */

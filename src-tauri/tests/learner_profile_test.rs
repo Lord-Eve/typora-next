@@ -356,3 +356,148 @@ fn test_aggregate_skips_corrupt_profile() {
     // bad-course 档案损坏但源数据还在 → backfill 重新生成，仍然可用
     // （若实现选择跳过也可接受，但不得 panic、不得影响 good-course）
 }
+
+// ---------- list_course_entries（Sprint 21 v2：课程级选择面板数据源） ----------
+
+#[test]
+fn test_list_entries_returns_newest_first_with_counts() {
+    let root = tmp_dir("entries_basic");
+    let index = root.join("learning-index.json");
+    let a = make_course_prefixed(&root, "course-A", None, "a-");
+    let b = make_course_prefixed(&root, "course-B", Some("technical"), "b-");
+    record_course_completion(&a, &index, 100).unwrap();
+    record_course_completion(&b, &index, 200).unwrap();
+
+    let entries = learner_profile::list_course_entries(&index);
+    assert_eq!(entries.len(), 2);
+    assert_eq!(entries[0]["course_name"], "course-B"); // 最新在前
+    assert_eq!(entries[0]["completed_at"], 200);
+    assert_eq!(entries[0]["course_type"], "technical");
+    // make_course 数据：2 mastered + 1 struggling（learning/not_started 不计）
+    assert_eq!(entries[0]["mastered_count"], 2);
+    assert_eq!(entries[0]["weak_count"], 1);
+    let concepts = entries[0]["concepts"].as_array().unwrap();
+    assert!(concepts
+        .iter()
+        .any(|c| c.as_str().unwrap_or("").contains("b-所有权")));
+    assert!(entries[1]["course_path"]
+        .as_str()
+        .unwrap()
+        .ends_with("course-A"));
+}
+
+#[test]
+fn test_list_entries_prunes_missing_dirs_and_tolerates_missing_index() {
+    let root = tmp_dir("entries_prune");
+    let index = root.join("learning-index.json");
+    assert!(learner_profile::list_course_entries(&index).is_empty()); // 索引不存在
+
+    let a = make_course(&root, "course-A", None);
+    let b = make_course(&root, "course-B", None);
+    record_course_completion(&a, &index, 100).unwrap();
+    record_course_completion(&b, &index, 200).unwrap();
+    fs::remove_dir_all(&b).unwrap();
+
+    let entries = learner_profile::list_course_entries(&index);
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0]["course_name"], "course-A");
+}
+
+#[test]
+fn test_list_entries_caps_concepts_at_twelve() {
+    let root = tmp_dir("entries_cap");
+    let index = root.join("learning-index.json");
+    let course = root.join("many-course");
+    let learning = course.join(".learning");
+    fs::create_dir_all(&learning).unwrap();
+    fs::write(
+        learning.join("project.json"),
+        r#"{"name": "many-course", "course_status": "completed", "chapters": []}"#,
+    )
+    .unwrap();
+    let nodes: Vec<serde_json::Value> = (0..20)
+        .map(|i| {
+            serde_json::json!({"id": format!("c{i}"), "name": format!("概念{i}"), "chapter": "ch1", "node_status": "mastered"})
+        })
+        .collect();
+    fs::write(
+        learning.join("knowledge-graph.json"),
+        serde_json::to_string(&serde_json::json!({"version": "1.0", "nodes": nodes, "edges": []}))
+            .unwrap(),
+    )
+    .unwrap();
+    record_course_completion(&course, &index, 100).unwrap();
+
+    let entries = learner_profile::list_course_entries(&index);
+    let concepts = entries[0]["concepts"].as_array().unwrap();
+    assert_eq!(concepts.len(), 12);
+    // 计数不受展示截断影响：20 个 mastered
+    assert_eq!(entries[0]["mastered_count"], 20);
+}
+
+// ---------- aggregate_selected_learner_context（选中集过滤） ----------
+
+#[test]
+fn test_selected_aggregate_only_includes_selected() {
+    let root = tmp_dir("selected_basic");
+    let index = root.join("learning-index.json");
+    let a = make_course_prefixed(&root, "course-A", None, "a-");
+    let b = make_course_prefixed(&root, "course-B", None, "b-");
+    let c = make_course_prefixed(&root, "course-C", None, "c-");
+    record_course_completion(&a, &index, 100).unwrap();
+    record_course_completion(&b, &index, 200).unwrap();
+    record_course_completion(&c, &index, 300).unwrap();
+
+    let sel = vec![b.to_string_lossy().to_string()];
+    let ctx = learner_profile::aggregate_selected_learner_context(&index, &sel).unwrap();
+    assert!(ctx.contains("course-B"));
+    assert!(!ctx.contains("course-A"));
+    assert!(!ctx.contains("course-C"));
+}
+
+#[test]
+fn test_selected_aggregate_empty_selection_returns_none() {
+    let root = tmp_dir("selected_empty");
+    let index = root.join("learning-index.json");
+    let a = make_course(&root, "course-A", None);
+    record_course_completion(&a, &index, 100).unwrap();
+
+    assert!(learner_profile::aggregate_selected_learner_context(&index, &[]).is_none());
+}
+
+#[test]
+fn test_selected_aggregate_caps_to_five_newest_of_selected() {
+    let root = tmp_dir("selected_cap");
+    let index = root.join("learning-index.json");
+    let mut all: Vec<String> = Vec::new();
+    for i in 0..7 {
+        let course = make_course_prefixed(&root, &format!("course-{i}"), None, &format!("课{i}-"));
+        record_course_completion(&course, &index, 1000 + i).unwrap();
+        all.push(course.to_string_lossy().to_string());
+    }
+
+    let ctx = learner_profile::aggregate_selected_learner_context(&index, &all).unwrap();
+    // 全选 7 门 → 注入仍受 MAX_COURSES=5 上限，截掉最老两门
+    assert_eq!(ctx.matches("已完结").count(), 5);
+    assert!(ctx.contains("course-6"));
+    assert!(!ctx.contains("course-0"));
+    assert!(!ctx.contains("course-1"));
+}
+
+#[test]
+fn test_selected_aggregate_output_order_is_newest_first_regardless_of_selection_order() {
+    let root = tmp_dir("selected_order");
+    let index = root.join("learning-index.json");
+    let a = make_course_prefixed(&root, "course-A", None, "a-");
+    let c = make_course_prefixed(&root, "course-C", None, "c-");
+    record_course_completion(&a, &index, 100).unwrap();
+    record_course_completion(&c, &index, 300).unwrap();
+
+    // 按 [新, 老] 顺序传入与 [老, 新] 传入，输出顺序都应 300 在前
+    let sel = vec![
+        a.to_string_lossy().to_string(),
+        c.to_string_lossy().to_string(),
+    ];
+    let ctx = learner_profile::aggregate_selected_learner_context(&index, &sel).unwrap();
+    assert!(ctx.find("course-C").unwrap() < ctx.find("course-A").unwrap());
+}

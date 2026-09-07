@@ -50,7 +50,10 @@ function buildMockDOM() {
           add(c) { if (!self._classes.includes(c)) self._classes.push(c); },
           remove(c) { self._classes = self._classes.filter(x => x !== c); },
           contains(c) { return self._classes.includes(c); },
-          toggle(c) { self.classList.contains(c) ? self.classList.remove(c) : self.classList.add(c); }
+          toggle(c, force) {
+            const want = force === undefined ? !self.classList.contains(c) : !!force;
+            want ? self.classList.add(c) : self.classList.remove(c);
+          }
         };
       },
 
@@ -74,6 +77,15 @@ function buildMockDOM() {
         c._parent = el;
         el._children.push(c);
         return c;
+      },
+
+      insertBefore(node, ref) {
+        if (node._parent) node._parent.removeChild(node);
+        const pos = ref ? el._children.indexOf(ref) : -1;
+        node._parent = el;
+        if (pos >= 0) el._children.splice(pos, 0, node);
+        else el._children.push(node);
+        return node;
       },
 
       removeChild(c) {
@@ -102,6 +114,7 @@ function buildMockDOM() {
 
       get childNodes() { return el._children.slice(); },
       get firstChild() { return el._children[0] || null; },
+      get firstElementChild() { return el._children[0] || null; },
 
       scrollIntoView() { el._scrolledIntoView = (el._scrolledIntoView || 0) + 1; },
 
@@ -117,8 +130,26 @@ function buildMockDOM() {
         }
       },
 
+      // Walk up self + ancestors, return first node matching sel (real-DOM closest)
+      closest(sel) {
+        let node = el;
+        while (node) {
+          if (matchesSelector(node, sel)) return node;
+          node = node._parent;
+        }
+        return null;
+      },
+
+      // Bubble like the real DOM: fire on self, then each ancestor, so
+      // event-delegation handlers (listener on a parent) are exercised.
       click() {
-        (el._listeners.click || []).forEach(fn => fn({ target: el, currentTarget: el }));
+        const ev = { target: el };
+        let node = el;
+        while (node) {
+          ev.currentTarget = node;
+          (node._listeners.click || []).forEach(fn => fn(ev));
+          node = node._parent;
+        }
       },
 
       querySelector(sel) {
@@ -187,23 +218,40 @@ function buildMockDOM() {
     return false;
   }
 
+  const VOID_TAGS = new Set(['input', 'br', 'hr', 'img', 'meta', 'link']);
+
+  // Stack-based tokenizer: unlike the previous lazy-regex version, this
+  // handles arbitrarily nested same-tag elements (<div><div>..</div>..</div>)
   function parseSimpleHTML(html, parent) {
-    // Parse top-level tags
-    const tagRegex = /<([a-zA-Z0-9]+)([^>]*)>([\s\S]*?)<\/\1>/g;
-    let match;
-    while ((match = tagRegex.exec(html)) !== null) {
-      const tag = match[1];
-      const attrsStr = match[2];
-      const content = match[3];
+    const tokenRe = /<(\/)?([a-zA-Z0-9]+)((?:"[^"]*"|'[^']*'|[^>"'])*)>|([^<]+)/g;
+    const stack = [{ el: parent }];
+    let m;
+    while ((m = tokenRe.exec(html)) !== null) {
+      const [, closing, tag, attrsStr, text] = m;
+
+      if (text !== undefined) {
+        const t = text.replace(/^\s+|\s+$/g, '');
+        const cur = stack[stack.length - 1].el;
+        if (t && cur._children.length === 0) cur._textContent = t;
+        continue;
+      }
+
+      const tagName = tag.toLowerCase();
+
+      if (closing) {
+        for (let i = stack.length - 1; i > 0; i--) {
+          if (stack[i].tag === tagName) { stack.length = i; break; }
+        }
+        continue;
+      }
 
       const child = createElement(tag);
 
-      // Parse attributes
-      const attrRegex = /([a-zA-Z-]+)=(["'])([^"']*)\2/g;
-      let attrMatch;
-      while ((attrMatch = attrRegex.exec(attrsStr)) !== null) {
-        const name = attrMatch[1];
-        const value = attrMatch[3];
+      const attrRegex = /([a-zA-Z-]+)=(?:"([^"]*)"|'([^']*)')/g;
+      let a;
+      while ((a = attrRegex.exec(attrsStr)) !== null) {
+        const name = a[1];
+        const value = a[2] !== undefined ? a[2] : a[3];
         if (name === 'id') child._attrs.id = value;
         else if (name === 'class') child._classes.push(...value.split(/\s+/).filter(Boolean));
         else if (name === 'style') {
@@ -215,41 +263,15 @@ function buildMockDOM() {
         else child._attrs[name] = value;
       }
 
-      // Parse dataset attributes
-      const dataAttrRegex = /data-([a-zA-Z-]+)=(["'])([^"']*)\2/g;
-      let dataMatch;
-      while ((dataMatch = dataAttrRegex.exec(attrsStr)) !== null) {
-        const key = dataMatch[1].replace(/-([a-z])/g, (_, ch) => ch.toUpperCase());
-        child._dataset[key] = dataMatch[3];
+      const dataAttrRegex = /data-([a-zA-Z-]+)=(?:"([^"]*)"|'([^']*)')/g;
+      let d;
+      while ((d = dataAttrRegex.exec(attrsStr)) !== null) {
+        const key = d[1].replace(/-([a-z])/g, (_, ch) => ch.toUpperCase());
+        child._dataset[key] = d[2] !== undefined ? d[2] : d[3];
       }
 
-      if (!content.includes('<')) {
-        child._textContent = content.replace(/^\s+|\s+$/g, '');
-      } else {
-        parseSimpleHTML(content, child);
-      }
-
-      parent.appendChild(child);
-    }
-
-    // Self-closing tags: input, br, hr, img
-    const selfCloseRegex = /<([a-zA-Z0-9]+)([^>]*)\s*\/>/g;
-    while ((match = selfCloseRegex.exec(html)) !== null) {
-      const tag = match[1];
-      const attrsStr = match[2];
-      const child = createElement(tag);
-
-      const attrRegex = /([a-zA-Z-]+)=(["'])([^"']*)\2/g;
-      let attrMatch;
-      while ((attrMatch = attrRegex.exec(attrsStr)) !== null) {
-        const name = attrMatch[1];
-        const value = attrMatch[3];
-        if (name === 'id') child._attrs.id = value;
-        else if (name === 'class') child._classes.push(...value.split(/\s+/).filter(Boolean));
-        else child._attrs[name] = value;
-      }
-
-      parent.appendChild(child);
+      stack[stack.length - 1].el.appendChild(child);
+      if (!VOID_TAGS.has(tagName)) stack.push({ el: child, tag: tagName });
     }
   }
 

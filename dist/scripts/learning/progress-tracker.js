@@ -464,22 +464,28 @@
         });
       }
 
-      // Chapter click (open for reading)
-      this.container.querySelectorAll('.learning-chapter-item.clickable').forEach(el => {
-        el.addEventListener('click', () => {
-          const index = parseInt(el.dataset.index, 10);
-          if (this.onChapterClick) this.onChapterClick(index);
+      // Chapter clicks + retry buttons: delegate on the persistent container
+      // (bound once). Per-element binding at render() time missed every row
+      // that only became .clickable later via updateChapter() — mid-generation
+      // chapter_complete → ready looked clickable but was dead (2026-09-03).
+      if (!this._delegated) {
+        this._delegated = true;
+        this.container.addEventListener('click', (e) => {
+          const target = e.target;
+          if (!target || typeof target.closest !== 'function') return;
+          const retryBtn = target.closest('.learning-retry-btn');
+          if (retryBtn) {
+            const idx = parseInt(retryBtn.dataset.index, 10);
+            if (this.onRetryClick) this.onRetryClick(idx);
+            return;
+          }
+          const item = target.closest('.learning-chapter-item');
+          if (item && item.classList.contains('clickable')) {
+            const idx = parseInt(item.dataset.index, 10);
+            if (this.onChapterClick) this.onChapterClick(idx);
+          }
         });
-      });
-
-      // Retry button
-      this.container.querySelectorAll('.learning-retry-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const index = parseInt(btn.dataset.index, 10);
-          if (this.onRetryClick) this.onRetryClick(index);
-        });
-      });
+      }
     }
 
     /**
@@ -545,6 +551,15 @@
       // Update chapter item clickability
       const clickable = chapter.status === 'ready' || chapter.status === 'completed';
       el.classList.toggle('clickable', clickable);
+
+      // The retry button only exists in the full _renderChapterItem output —
+      // rebuild the row when status flips to failed mid-generation so recovery
+      // is available immediately (delegation keeps the replaced node live).
+      if (chapter.status === 'failed' && !el.querySelector('.learning-retry-btn')) {
+        const temp = document.createElement('div');
+        temp.innerHTML = this._renderChapterItem(chapter, index);
+        el.replaceWith(temp.firstElementChild);
+      }
 
       // Update progress bar
       const pct = this.manager.getProgressPercentage();

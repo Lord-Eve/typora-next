@@ -49,6 +49,26 @@ Feature: 跨课程记忆（结课档案 + 全局索引 + plan 注入）
     And project-manager should load learner courses on dialog open
     And the hint should be hidden when there are no completed courses
 
+  Scenario: 记忆面板支持课程级勾选与搜索
+    Given the real index.html and project-manager.js sources
+    Then the hint container should be a memory panel with search and list
+    And the panel should explain what selecting a course does
+    And project-manager should load course details and render selectable rows
+    And rows should support search filtering by course name and concept
+
+  Scenario: 输入目标后 agent 把相关历史排前面，用户可不采纳
+    Given the real index.html and project-manager.js sources
+    And the real ai_agent.rs source
+    And the real lib.rs source
+    And the real memory_rank source
+    Then goal input should debounce-invoke rank_learner_courses
+    And ranked results should reorder rows with score and reason and pre-check relevant courses
+    And a reject control should restore the pre-rank order and selection
+    And rank failure should degrade silently to manual selection
+    And rank_learner_courses and list_learner_courses_detail should be registered
+    And memory_rank should build a compact prompt and parse validated rankings
+    And plan injection should accept an explicit memory course selection
+
   Scenario: 存量完结课程打开时自动 backfill
     Given the real project-resume.js source
     Then completed course load should invoke backfill_completion_profile

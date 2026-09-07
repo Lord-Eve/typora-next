@@ -46,6 +46,10 @@ steps.given('the real ai_agent.rs source', function () {
   this.aiAgentRs = read(path.join(SRC, 'ai_agent.rs'));
 });
 
+steps.given('the real memory_rank source', function () {
+  this.memoryRankRs = read(path.join(SRC, 'memory_rank.rs'));
+});
+
 steps.given('the real index.html and project-manager.js sources', function () {
   this.indexHtml = read(path.join(DIST, 'index.html'));
   this.projectManagerJs = read(path.join(DIST, 'scripts/learning/project-manager.js'));
@@ -223,6 +227,173 @@ steps.then('the hint should be hidden when there are no completed courses', func
   }
   if (!this.projectManagerJs.includes("style.display = 'none'")) {
     throw new Error('loadLearnerContextHint should hide hint when list is empty');
+  }
+});
+
+steps.then('the hint container should be a memory panel with search and list', function () {
+  // 外层容器 id + 默认隐藏必须保留
+  if (!this.indexHtml.includes('id="learnerContextHint" style="display: none;"')) {
+    throw new Error('learnerContextHint wrapper must keep id + default hidden');
+  }
+  for (const id of ['learnerMemorySearch', 'learnerMemoryList', 'learnerMemoryStatus']) {
+    if (!this.indexHtml.includes(`id="${id}"`)) {
+      throw new Error(`index.html missing memory panel element #${id}`);
+    }
+  }
+  // 左右排布（面板是侧栏，不是上下堆叠的提示行）
+  if (!this.learningCss.includes('.learner-context-hint')) {
+    throw new Error('learning.css missing .learner-context-hint style');
+  }
+});
+
+steps.then('the panel should explain what selecting a course does', function () {
+  if (!this.indexHtml.includes('id="learnerMemoryHelp"')) {
+    throw new Error('index.html missing #learnerMemoryHelp explainer');
+  }
+  const idx = this.indexHtml.indexOf('learnerMemoryHelp');
+  const seg = this.indexHtml.slice(idx, idx + 400);
+  // 说明必须讲清「勾选 = 注入什么效果」，而不是空泛标题
+  if (!seg.includes('已知基础') || !seg.includes('大纲')) {
+    throw new Error('explainer should state checked courses feed into the outline as known baseline');
+  }
+});
+
+steps.then('project-manager should load course details and render selectable rows', function () {
+  if (!this.projectManagerJs.includes("invoke('list_learner_courses_detail'")) {
+    throw new Error('project-manager.js should call list_learner_courses_detail');
+  }
+  if (!this.projectManagerJs.includes('function renderMemoryList')) {
+    throw new Error('project-manager.js missing renderMemoryList');
+  }
+  // 每门课一个可勾选行，携带 course_path 作为选择身份
+  if (!this.projectManagerJs.includes('data-path')) {
+    throw new Error('memory rows should carry data-path for selection identity');
+  }
+});
+
+steps.then('rows should support search filtering by course name and concept', function () {
+  if (!this.projectManagerJs.includes('learnerMemorySearch')) {
+    throw new Error('project-manager.js missing learnerMemorySearch handling');
+  }
+  if (!this.projectManagerJs.includes("addEventListener('input'")) {
+    throw new Error('search box should listen to input events for live filtering');
+  }
+  // 过滤是纯函数：课程名 + 概念名 拼接小写匹配
+  const idx = this.projectManagerJs.indexOf('function memoryMatchesQuery');
+  if (idx < 0) {
+    throw new Error('missing memoryMatchesQuery filter helper');
+  }
+  const seg = this.projectManagerJs.slice(idx, idx + 400);
+  if (!seg.includes('concepts') || !seg.includes('toLowerCase')) {
+    throw new Error('filter should match course name and concepts, case-insensitively');
+  }
+});
+
+steps.then('goal input should debounce-invoke rank_learner_courses', function () {
+  if (!this.projectManagerJs.includes("invoke('rank_learner_courses'")) {
+    throw new Error('project-manager.js should call rank_learner_courses');
+  }
+  // 防抖：setTimeout + clearTimeout
+  if (!this.projectManagerJs.includes('setTimeout')) {
+    throw new Error('rank trigger should be debounced via setTimeout');
+  }
+  if (!this.projectManagerJs.includes('clearTimeout')) {
+    throw new Error('debounce should cancel prior timer via clearTimeout');
+  }
+});
+
+steps.then('ranked results should reorder rows with score and reason and pre-check relevant courses', function () {
+  // 相关性排序结果应驱动行顺序与预勾选
+  if (!this.projectManagerJs.includes('memoryRank')) {
+    throw new Error('project-manager.js missing memory ranking state (memoryRank)');
+  }
+  if (!/\.score\b|score\s*:/.test(this.projectManagerJs)) {
+    throw new Error('ranked rows should carry a relevance score');
+  }
+  if (!this.projectManagerJs.includes('reason')) {
+    throw new Error('ranked rows should surface the agent reason');
+  }
+});
+
+steps.then('a reject control should restore the pre-rank order and selection', function () {
+  if (!this.indexHtml.includes('id="learnerMemoryReject"')) {
+    throw new Error('index.html missing #learnerMemoryReject control');
+  }
+  if (!this.indexHtml.includes('不采纳')) {
+    throw new Error('reject control should be labeled 不采纳');
+  }
+  const js = this.projectManagerJs;
+  if (!js.includes('function rejectMemoryRecommendation')) {
+    throw new Error('missing rejectMemoryRecommendation handler');
+  }
+  const idx = js.indexOf('function rejectMemoryRecommendation');
+  const seg = js.slice(idx, idx + 500);
+  // 还原推荐前的顺序与勾选快照
+  if (!seg.includes('snapshot')) {
+    throw new Error('reject should restore order + selection from the pre-rank snapshot');
+  }
+  if (!js.includes('function applyMemoryRanking') || js.indexOf('snapshot =') < 0) {
+    throw new Error('ranking application should first snapshot order + selection');
+  }
+});
+
+steps.then('rank failure should degrade silently to manual selection', function () {
+  const idx = this.projectManagerJs.indexOf("invoke('rank_learner_courses'");
+  if (idx < 0) {
+    throw new Error('project-manager.js missing rank_learner_courses invoke');
+  }
+  const seg = this.projectManagerJs.slice(idx, idx + 500);
+  if (!seg.includes('catch')) {
+    throw new Error('rank invoke must be wrapped in try/catch so failure is non-fatal');
+  }
+});
+
+steps.then('rank_learner_courses and list_learner_courses_detail should be registered', function () {
+  if (!this.libRs.includes('list_learner_courses_detail')) {
+    throw new Error('lib.rs missing list_learner_courses_detail command');
+  }
+  if (!this.libRs.includes('rank_learner_courses')) {
+    throw new Error('lib.rs missing rank_learner_courses command');
+  }
+});
+
+steps.then('memory_rank should build a compact prompt and parse validated rankings', function () {
+  if (!this.memoryRankRs.includes('pub fn build_rank_prompt')) {
+    throw new Error('memory_rank.rs missing build_rank_prompt');
+  }
+  if (!this.memoryRankRs.includes('pub fn parse_rank_response')) {
+    throw new Error('memory_rank.rs missing parse_rank_response');
+  }
+  // 防御式解析：丢弃 LLM 幻觉出的未知 path
+  if (!this.memoryRankRs.includes('valid') && !this.memoryRankRs.includes('known')) {
+    throw new Error('parse should drop unknown/hallucinated course paths');
+  }
+});
+
+steps.then('plan injection should accept an explicit memory course selection', function () {
+  // 选中集取代布尔开关：None=旧行为全量注入；Some(paths)=只注入选中课程；
+  // Some([])=用户取消全部勾选 = 完全不注入
+  if (!this.aiAgentRs.includes('memory_courses: Option<Vec<String>>')) {
+    throw new Error('plan_course_llm missing memory_courses selection parameter');
+  }
+  if (!this.aiAgentRs.includes('aggregate_selected_learner_context')) {
+    throw new Error('plan should call aggregate_selected_learner_context (path-filtered)');
+  }
+  // 空选中集必须在聚合前短路（不读盘、不注入）——门控 match 块内检查
+  const gateIdx = this.aiAgentRs.indexOf('match &memory_courses');
+  const aggIdx = this.aiAgentRs.indexOf('aggregate_selected_learner_context', gateIdx);
+  if (gateIdx < 0 || aggIdx < 0 || aggIdx - gateIdx > 600) {
+    throw new Error('plan gating block must wrap the selected aggregation call');
+  }
+  const gateSeg = this.aiAgentRs.slice(gateIdx, gateIdx + 600);
+  if (!gateSeg.includes('is_empty()')) {
+    throw new Error('empty selection should short-circuit to None before aggregation');
+  }
+  // 前端把勾选集合透传为 memoryCourses
+  const inv = this.projectManagerJs.indexOf("invoke('plan_course_llm'");
+  const seg = this.projectManagerJs.slice(inv, inv + 400);
+  if (!seg.includes('memoryCourses')) {
+    throw new Error('frontend should pass memoryCourses from the checkbox set');
   }
 });
 

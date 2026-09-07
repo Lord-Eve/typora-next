@@ -84,6 +84,20 @@
     elements.levelRadios = document.querySelectorAll('input[name="learningLevel"]');
     elements.hoursSelect = document.getElementById('learningHours');
     elements.learnerContextHint = document.getElementById('learnerContextHint');
+    elements.learnerMemorySub = document.getElementById('learnerMemorySub');
+    elements.learnerMemorySearch = document.getElementById('learnerMemorySearch');
+    elements.learnerMemoryStatus = document.getElementById('learnerMemoryStatus');
+    elements.learnerMemoryStatusText = document.getElementById('learnerMemoryStatusText');
+    elements.learnerMemoryReject = document.getElementById('learnerMemoryReject');
+    elements.learnerMemoryList = document.getElementById('learnerMemoryList');
+    elements.learnerPersonaRow = document.getElementById('learnerPersonaRow');
+    elements.learnerPersonaSummary = document.getElementById('learnerPersonaSummary');
+    elements.learnerPersonaDetail = document.getElementById('learnerPersonaDetail');
+    elements.learnerPersonaChips = document.getElementById('learnerPersonaChips');
+    elements.learnerPersonaSamples = document.getElementById('learnerPersonaSamples');
+    elements.learnerPersonaSources = document.getElementById('learnerPersonaSources');
+    elements.learnerPersonaToggle = document.getElementById('learnerPersonaToggle');
+    elements.learnerPersonaRebuild = document.getElementById('learnerPersonaRebuild');
     elements.errorDisplay = document.getElementById('learningError');
     elements.outlineInfo = document.getElementById('learningOutlineInfo');
     elements.outlineList = document.getElementById('learningOutlineList');
@@ -143,6 +157,8 @@
         dialogState.error = null;
         showError(null);
       }
+      // Sprint 21 v2: 目标变化 → 防抖刷新记忆面板的相关性推荐
+      scheduleMemoryRecommendation();
     });
 
     // Listen for session-init status events from Rust (fires during
@@ -274,6 +290,7 @@
     elements.modal.style.display = 'flex';
     setTimeout(() => elements.goalInput.focus(), 100);
     loadLearnerContextHint();
+    loadLearnerPersona();
   }
 
   // Sprint 22: roadmap 卡片点击 → 预填创建对话框（不自动提交，用户确认后再生成）
@@ -296,22 +313,310 @@
     }
   }
 
-  // Sprint 21: 跨课记忆提示行——有已完结课程时告知用户本次规划将参考它们
+  // ============================================
+  // Sprint 21 v2: 跨课程记忆面板（课程级勾选 + agent 相关性推荐）
+  // ============================================
+  // 打开对话框时 list_learner_courses_detail 拉取课程级条目渲染为右栏列表；
+  // 勾选集合随大纲规划请求透传（选中即注入，全不选即不注入）。目标输入防抖
+  // 触发 rank_learner_courses：相关课程排前、标 ⭐ 并自动勾选（top 3 且
+  // score≥60）；「不采纳」还原推荐前的顺序与勾选。推荐失败静默降级为纯手动
+  // 勾选，绝不阻塞创建；索引/结课档案任何情况下都不被此面板改写。
+  const memoryState = {
+    courses: [],           // list_course_entries 返回（新→旧）
+    order: [],             // 当前显示顺序（course_path 数组）
+    selected: new Set(),   // 勾选集合
+    query: '',             // 搜索词
+    rank: null,            // path -> {score, reason}；null = 未推荐态
+    snapshot: null,        // 推荐前 {order, selected:[...]}，供不采纳还原
+    recommending: false,
+    rankSeq: 0,            // 竞态守卫：只采纳最后一次请求的响应
+    lastRankGoal: '',
+    wired: false
+  };
+  let memoryRankTimer = null;
+  const MEMORY_RECOMMEND_DEBOUNCE_MS = 700;
+  const MEMORY_RECOMMEND_MIN_GOAL = 4;
+  const MEMORY_AUTO_CHECK_MIN_SCORE = 60;
+  const MEMORY_AUTO_CHECK_MAX = 3;
+
+  function _memoryPathsChrono() {
+    return memoryState.courses.map(c => c.course_path);
+  }
+
   async function loadLearnerContextHint() {
     if (!window.__TAURI__ || !elements.learnerContextHint) return;
     try {
       const { invoke } = window.__TAURI__.core;
-      const names = await invoke('list_learner_courses');
-      if (Array.isArray(names) && names.length > 0) {
-        elements.learnerContextHint.textContent =
-          `📚 将参考 ${names.length} 门已完结课程的学习记录（${names.join('、')}）`;
-        elements.learnerContextHint.style.display = 'block';
-      } else {
-        elements.learnerContextHint.style.display = 'none';
-      }
+      const list = await invoke('list_learner_courses_detail');
+      memoryState.courses = Array.isArray(list) ? list : [];
+      memoryState.order = _memoryPathsChrono();
+      memoryState.selected = new Set(memoryState.order); // 默认全选
+      memoryState.rank = null;
+      memoryState.snapshot = null;
+      memoryState.query = '';
+      memoryState.recommending = false;
+      memoryState.lastRankGoal = '';
+      memoryState.rankSeq++; // 作废在途推荐
+      if (elements.learnerMemorySearch) elements.learnerMemorySearch.value = '';
+      if (memoryRankTimer) { clearTimeout(memoryRankTimer); memoryRankTimer = null; }
+      bindMemoryPanelEvents();
+      renderMemoryList();
+      elements.learnerContextHint.style.display = memoryState.courses.length ? 'block' : 'none';
     } catch (e) {
       console.warn('[LearningProject] list_learner_courses failed (non-fatal):', e);
+      elements.learnerContextHint.style.display = 'none';
     }
+  }
+
+  function bindMemoryPanelEvents() {
+    if (memoryState.wired) return;
+    memoryState.wired = true;
+    if (elements.learnerMemorySearch) {
+      elements.learnerMemorySearch.addEventListener('input', () => {
+        memoryState.query = elements.learnerMemorySearch.value || '';
+        renderMemoryList();
+      });
+    }
+    if (elements.learnerMemoryList) {
+      // 事件委托：innerHTML 重建行不丢监听
+      elements.learnerMemoryList.addEventListener('change', (e) => {
+        const cb = e.target;
+        if (!cb || !cb.dataset || !cb.dataset.path) return;
+        if (cb.checked) memoryState.selected.add(cb.dataset.path);
+        else memoryState.selected.delete(cb.dataset.path);
+        updateMemorySub();
+      });
+    }
+    if (elements.learnerMemoryReject) {
+      elements.learnerMemoryReject.addEventListener('click', rejectMemoryRecommendation);
+    }
+  }
+
+  // ============================================
+  // Sprint 23: 学习者画像（领域组合 + 类比素材）— 面板摘要行
+  // ============================================
+  // 画像文件是后端派生缓存：打开对话框时 get_learner_persona 按源课程指纹
+  // 决定复用/重建（LLM 聚类，失败自动规则降级），前端只呈现与透传开关。
+  // 与课程勾选正交：勾选控制「学习者历史」段落，enabled 控制「画像」段落，
+  // 关不关都只影响本次规划。任何失败静默隐藏摘要行，绝不阻塞对话框。
+  const personaState = { enabled: true, wired: false };
+
+  async function loadLearnerPersona(opts) {
+    if (!window.__TAURI__ || !elements.learnerPersonaRow) return;
+    try {
+      const { invoke } = window.__TAURI__.core;
+      const d = await invoke('get_learner_persona', opts || {});
+      if (!d || !d.ready) {
+        personaState.enabled = true;
+        elements.learnerPersonaRow.style.display = 'none';
+        if (elements.learnerPersonaDetail) elements.learnerPersonaDetail.style.display = 'none';
+        return;
+      }
+      if (!opts) personaState.enabled = true; // 新对话框默认启用（本次级开关重置）
+      const line = d.summary_line ||
+        ((d.domains || []).length + ' 个领域 · ' + (d.analogy_count || 0) + ' 个类比素材');
+      if (elements.learnerPersonaSummary) elements.learnerPersonaSummary.textContent = '画像：' + line;
+      bindPersonaEvents();
+      renderPersonaDetail(d);
+      elements.learnerPersonaRow.style.display = 'flex';
+      // 手动重建（opts.force）时保持当前开合态；新对话框默认收起明细
+      if (!opts && elements.learnerPersonaDetail) elements.learnerPersonaDetail.style.display = 'none';
+    } catch (e) {
+      console.warn('[LearningProject] get_learner_persona failed (non-fatal):', e);
+      elements.learnerPersonaRow.style.display = 'none';
+      if (elements.learnerPersonaDetail) elements.learnerPersonaDetail.style.display = 'none';
+    }
+  }
+
+  function bindPersonaEvents() {
+    if (personaState.wired) return;
+    personaState.wired = true;
+    if (elements.learnerPersonaRow) {
+      elements.learnerPersonaRow.addEventListener('click', () => {
+        if (!elements.learnerPersonaDetail) return;
+        const open = elements.learnerPersonaDetail.style.display !== 'block';
+        elements.learnerPersonaDetail.style.display = open ? 'block' : 'none';
+        elements.learnerPersonaRow.classList.toggle('open', open);
+      });
+    }
+    if (elements.learnerPersonaToggle) {
+      elements.learnerPersonaToggle.addEventListener('change', () => {
+        personaState.enabled = !!elements.learnerPersonaToggle.checked;
+      });
+    }
+    if (elements.learnerPersonaRebuild) {
+      elements.learnerPersonaRebuild.addEventListener('click', (e) => {
+        e.stopPropagation();
+        elements.learnerPersonaRebuild.disabled = true;
+        elements.learnerPersonaRebuild.textContent = '重建中…';
+        loadLearnerPersona({ force: true }).finally(() => {
+          elements.learnerPersonaRebuild.disabled = false;
+          elements.learnerPersonaRebuild.textContent = '重建画像';
+        });
+      });
+    }
+  }
+
+  function renderPersonaDetail(d) {
+    if (elements.learnerPersonaChips) {
+      elements.learnerPersonaChips.innerHTML = (d.domains || []).map(dom =>
+        '<span class="learner-persona-chip">' + escapeHtml(dom.name || '') +
+        '<small>' + ((dom.concepts || []).length) + ' 概念</small></span>'
+      ).join('');
+    }
+    if (elements.learnerPersonaSamples) {
+      const bank = (d.analogy_bank || []).map(x => x && x.concept).filter(Boolean);
+      const ruleTag = d.source === 'rule'
+        ? '<span class="learner-persona-rule">简化模式（AI 聚合不可用，按课程直列）</span>' : '';
+      const shown = bank.slice(0, 12).map(escapeHtml).join('、');
+      elements.learnerPersonaSamples.innerHTML = ruleTag +
+        (shown ? '<b>类比素材：</b>' + shown + (bank.length > 12 ? '…' : '') : '');
+    }
+    if (elements.learnerPersonaSources) {
+      const names = [];
+      (d.domains || []).forEach(dom =>
+        (dom.course_names || []).forEach(n => { if (n && !names.includes(n)) names.push(n); }));
+      elements.learnerPersonaSources.textContent = names.length ? '来源：' + names.join(' · ') : '';
+    }
+    if (elements.learnerPersonaToggle) elements.learnerPersonaToggle.checked = personaState.enabled;
+  }
+
+  function memoryMatchesQuery(course, q) {
+    if (!q) return true;
+    const needle = q.toLowerCase();
+    const hay = [course.course_name || '', ...(course.concepts || [])].join(' ').toLowerCase();
+    return hay.includes(needle);
+  }
+
+  function updateMemorySub() {
+    if (elements.learnerMemorySub) {
+      elements.learnerMemorySub.textContent =
+        `已选 ${memoryState.selected.size}/${memoryState.courses.length}`;
+    }
+  }
+
+  function renderMemoryList() {
+    const listEl = elements.learnerMemoryList;
+    if (!listEl) return;
+    const byPath = {};
+    memoryState.courses.forEach(c => { byPath[c.course_path] = c; });
+    const q = (memoryState.query || '').trim();
+    const html = memoryState.order
+      .map(p => byPath[p])
+      .filter(Boolean)
+      .filter(c => memoryMatchesQuery(c, q))
+      .map(c => _memoryRowHtml(c))
+      .join('');
+    listEl.innerHTML = html || '<div class="learner-memory-empty">' + (q ? '无匹配课程' : '暂无已结课课程') + '</div>';
+    updateMemorySub();
+    renderMemoryStatus();
+  }
+
+  function _memoryRowHtml(c) {
+    const rec = memoryState.rank ? memoryState.rank[c.course_path] : null;
+    const checked = memoryState.selected.has(c.course_path) ? ' checked' : '';
+    const d = c.completed_at ? new Date(c.completed_at * 1000) : null;
+    const date = d
+      ? d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
+      : '';
+    const meta = [date, `掌握${c.mastered_count || 0}`, `薄弱${c.weak_count || 0}`].filter(Boolean).join(' · ');
+    const reason = rec
+      ? `<div class="lmr-reason">⭐ ${escapeHtml(rec.reason || '与目标相关')}（相关度 ${Number(rec.score) || 0}）</div>`
+      : '';
+    return '<label class="learner-memory-row' + (rec ? ' recommended' : '') + '" title="' + escapeHtml(c.course_path) + '">' +
+      `<input type="checkbox" data-path="${escapeHtml(c.course_path)}"${checked}>` +
+      `<span class="lmr-main"><span class="lmr-name">${escapeHtml(c.course_name || '未命名课程')}</span>` +
+      `<span class="lmr-meta">${meta}</span>${reason}</span></label>`;
+  }
+
+  function renderMemoryStatus() {
+    const st = elements.learnerMemoryStatus;
+    if (!st) return;
+    if (memoryState.recommending) {
+      st.style.display = 'block';
+      if (elements.learnerMemoryStatusText) elements.learnerMemoryStatusText.textContent = '🔍 正在分析课程相关性…';
+      if (elements.learnerMemoryReject) elements.learnerMemoryReject.style.display = 'none';
+      return;
+    }
+    if (memoryState.rank) {
+      st.style.display = 'block';
+      if (elements.learnerMemoryStatusText) elements.learnerMemoryStatusText.textContent = '✨ 已按相关度排序并推荐勾选';
+      if (elements.learnerMemoryReject) elements.learnerMemoryReject.style.display = 'inline-block';
+      return;
+    }
+    st.style.display = 'none';
+  }
+
+  function scheduleMemoryRecommendation() {
+    if (memoryRankTimer) clearTimeout(memoryRankTimer);
+    if (!memoryState.courses.length) return;
+    const goal = ((elements.goalInput && elements.goalInput.value) || '').trim();
+    if (goal.length < MEMORY_RECOMMEND_MIN_GOAL || goal === memoryState.lastRankGoal) return;
+    memoryRankTimer = setTimeout(() => {
+      memoryRankTimer = null;
+      recommendMemoryCourses(goal);
+    }, MEMORY_RECOMMEND_DEBOUNCE_MS);
+  }
+
+  async function recommendMemoryCourses(goal) {
+    if (!window.__TAURI__) return;
+    const seq = ++memoryState.rankSeq;
+    memoryState.lastRankGoal = goal;
+    memoryState.recommending = true;
+    renderMemoryStatus();
+    try {
+      const { invoke } = window.__TAURI__.core;
+      const ranked = await invoke('rank_learner_courses', { goal });
+      if (seq !== memoryState.rankSeq) return; // 更新的请求已发出，丢弃旧响应
+      memoryState.recommending = false;
+      if (Array.isArray(ranked) && ranked.length > 0) applyMemoryRanking(ranked);
+      else renderMemoryStatus(); // 无结果：静默保持手动模式
+    } catch (e) {
+      if (seq !== memoryState.rankSeq) return;
+      console.warn('[LearningProject] rank_learner_courses failed (non-fatal):', e);
+      memoryState.recommending = false;
+      renderMemoryStatus();
+    }
+  }
+
+  function applyMemoryRanking(ranked) {
+    // 首次推荐前留快照，供「不采纳」还原
+    if (!memoryState.snapshot) {
+      memoryState.snapshot = {
+        order: memoryState.order.slice(),
+        selected: Array.from(memoryState.selected)
+      };
+    }
+    const rank = {};
+    const top = [];
+    ranked.forEach(r => {
+      const p = r && r.course_path;
+      if (!p || rank[p]) return;
+      const score = Number(r.score) || 0;
+      rank[p] = { score, reason: r.reason || '' };
+      if (score >= MEMORY_AUTO_CHECK_MIN_SCORE && top.length < MEMORY_AUTO_CHECK_MAX) top.push(p);
+    });
+    memoryState.rank = rank;
+    const seen = new Set();
+    const ordered = [];
+    ranked.forEach(r => {
+      const p = r && r.course_path;
+      if (p && rank[p] && !seen.has(p)) { seen.add(p); ordered.push(p); }
+    });
+    memoryState.order = ordered.concat(_memoryPathsChrono().filter(p => !seen.has(p)));
+    if (top.length) memoryState.selected = new Set(top); // 全低分则保留原勾选
+    renderMemoryList();
+  }
+
+  function rejectMemoryRecommendation() {
+    if (memoryState.snapshot) {
+      memoryState.order = memoryState.snapshot.order;
+      memoryState.selected = new Set(memoryState.snapshot.selected);
+      memoryState.snapshot = null;
+    }
+    memoryState.rank = null;
+    memoryState.lastRankGoal = ''; // 允许对同一目标重新推荐
+    renderMemoryList();
   }
 
   function closeDialog() {
@@ -434,7 +739,12 @@
         const outline = await invoke('plan_course_llm', {
           goal: dialogState.goal,
           level: dialogState.level,
-          hours: dialogState.hours
+          hours: dialogState.hours,
+          // 记忆面板勾选集合：数组 = 只注入这些课程（[]=不注入）；
+          // 无历史课程时省略，Rust 走旧全量行为（结果等价于无记忆）
+          memoryCourses: memoryState.courses.length ? Array.from(memoryState.selected) : undefined,
+          // Sprint 23：画像段落开关（仅影响本次；面板缺席时保持默认启用）
+          personaEnabled: personaState.enabled
         });
         console.log('[LearningProject] plan_course_llm returned:', outline);
 

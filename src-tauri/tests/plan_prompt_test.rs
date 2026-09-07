@@ -14,7 +14,7 @@ use plan_prompt::{build_plan_prompt, parse_plan_response};
 
 #[test]
 fn test_build_plan_prompt_includes_goal_level_hours() {
-    let p = build_plan_prompt("学 Rust", "beginner", 3, None);
+    let p = build_plan_prompt("学 Rust", "beginner", 3, None, None);
     assert!(p.contains("学 Rust"), "prompt should include goal");
     assert!(
         p.contains("小白（零基础）"),
@@ -29,14 +29,14 @@ fn test_build_plan_prompt_includes_goal_level_hours() {
 
 #[test]
 fn test_build_plan_prompt_falls_back_to_raw_level_when_unknown() {
-    let p = build_plan_prompt("goal", "unknown-level", 1, None);
+    let p = build_plan_prompt("goal", "unknown-level", 1, None, None);
     // Unknown level should be passed through verbatim
     assert!(p.contains("unknown-level"));
 }
 
 #[test]
 fn test_build_plan_prompt_requests_course_type() {
-    let p = build_plan_prompt("鉴赏巴赫的音乐", "beginner", 4, None);
+    let p = build_plan_prompt("鉴赏巴赫的音乐", "beginner", 4, None, None);
     assert!(
         p.contains("course_type"),
         "plan prompt should request course_type"
@@ -48,7 +48,7 @@ fn test_build_plan_prompt_requests_course_type() {
 
 #[test]
 fn test_build_plan_prompt_enumerates_engineering() {
-    let p = build_plan_prompt("学习半导体刻蚀工艺", "intermediate", 5, None);
+    let p = build_plan_prompt("学习半导体刻蚀工艺", "intermediate", 5, None, None);
     assert!(
         p.contains("engineering"),
         "plan prompt should enumerate the engineering course type"
@@ -59,7 +59,7 @@ fn test_build_plan_prompt_enumerates_engineering() {
 
 #[test]
 fn test_learner_context_none_keeps_prompt_unchanged() {
-    let p = build_plan_prompt("学 Rust", "beginner", 3, None);
+    let p = build_plan_prompt("学 Rust", "beginner", 3, None, None);
     assert!(!p.contains("学习者历史"), "None → no learner section");
     assert!(!p.contains("衔接规则"));
     // 信息块后紧跟要求清单（无注入段）
@@ -68,7 +68,7 @@ fn test_learner_context_none_keeps_prompt_unchanged() {
 
 #[test]
 fn test_learner_context_empty_string_treated_as_none() {
-    let p = build_plan_prompt("学 Rust", "beginner", 3, Some(""));
+    let p = build_plan_prompt("学 Rust", "beginner", 3, Some(""), None);
     assert!(!p.contains("学习者历史"));
     assert!(p.contains("预计投入时间：3 小时\n\n要求："));
 }
@@ -76,7 +76,7 @@ fn test_learner_context_empty_string_treated_as_none() {
 #[test]
 fn test_learner_context_injected_before_requirements() {
     let ctx = "Rust 入门（technical，已完结）：\n  已掌握：所有权、借用\n  薄弱：生命周期（quiz 2 次评级 struggling）";
-    let p = build_plan_prompt("学 Rust 进阶", "intermediate", 4, Some(ctx));
+    let p = build_plan_prompt("学 Rust 进阶", "intermediate", 4, Some(ctx), None);
 
     assert!(p.contains("## 学习者历史（来自已完结课程，仅供参考）"));
     assert!(p.contains("已掌握：所有权、借用"));
@@ -182,4 +182,29 @@ fn test_parse_plan_response_rejects_missing_chapters() {
 fn test_parse_plan_response_rejects_malformed_json() {
     assert!(parse_plan_response("not json at all").is_err());
     assert!(parse_plan_response("```json\n{invalid}\n```").is_err());
+}
+
+// ---------- Sprint 23: persona_section 参数 ----------
+
+#[test]
+fn test_persona_section_none_and_blank_keep_prompt_identical() {
+    let base = build_plan_prompt("G", "beginner", 3, None, None);
+    assert!(!base.contains("学习者画像"));
+    assert!(!base.contains("类比"));
+    let blank = build_plan_prompt("G", "beginner", 3, None, Some("   "));
+    assert_eq!(base, blank, "blank persona must not add any bytes");
+}
+
+#[test]
+fn test_persona_section_sits_between_memory_and_requirements() {
+    let ctx = "已掌握：X、Y";
+    let persona = "## 学习者画像（派生）\n- 电子电路：反馈环路\n\n## 类比规则\n1. 类比\n\n";
+    let p = build_plan_prompt("G", "beginner", 3, Some(ctx), Some(persona));
+    let i_ctx = p.find("已掌握：X").expect("memory block present");
+    let i_per = p.find("学习者画像").expect("persona block present");
+    let i_req = p.find("要求：").expect("requirements present");
+    assert!(
+        i_ctx < i_per && i_per < i_req,
+        "persona must render after memory section, before requirements"
+    );
 }

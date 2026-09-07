@@ -181,6 +181,26 @@ pub fn record_course_completion(
 /// status wins). Lazily prunes stale entries and backfills missing profiles.
 /// Returns None when nothing usable remains.
 pub fn aggregate_learner_context(index_path: &Path) -> Option<String> {
+    aggregate_impl(index_path, None)
+}
+
+/// Sprint 21 v2: aggregate only the courses the user picked in the memory
+/// panel. The selection filter runs after stale-prune but before the
+/// MAX_COURSES cap, so picking 7 courses injects the newest 5 *of the
+/// selection*. Empty selection = inject nothing (None, no disk reads);
+/// the index/profiles themselves are never modified by opting out.
+pub fn aggregate_selected_learner_context(
+    index_path: &Path,
+    selected: &[String],
+) -> Option<String> {
+    if selected.is_empty() {
+        return None;
+    }
+    let set: HashSet<&str> = selected.iter().map(|s| s.as_str()).collect();
+    aggregate_impl(index_path, Some(&set))
+}
+
+fn aggregate_impl(index_path: &Path, only: Option<&HashSet<&str>>) -> Option<String> {
     if !index_path.exists() {
         return None;
     }
@@ -198,6 +218,16 @@ pub fn aggregate_learner_context(index_path: &Path) -> Option<String> {
     if courses.len() != before {
         index["courses"] = serde_json::json!(courses.clone());
         let _ = write_index(index_path, &index); // best-effort
+    }
+
+    // Selection filter (v2): keep only courses the user checked
+    if let Some(sel) = only {
+        courses.retain(|c| {
+            c.get("course_path")
+                .and_then(|v| v.as_str())
+                .map(|p| sel.contains(p))
+                .unwrap_or(false)
+        });
     }
 
     // Newest first, truncate
@@ -329,6 +359,197 @@ pub fn list_valid_course_names(index_path: &Path) -> Vec<String> {
                 .map(String::from)
         })
         .collect()
+}
+
+/// Concept names shown per entry (panel + rank prompt stay compact).
+const MAX_CONCEPTS_SHOWN: usize = 12;
+
+/// Full entries for the memory selection panel (Sprint 21 v2), newest first,
+/// same prune/cap rules as aggregation. Each entry:
+/// `{course_path, course_name, completed_at, course_type?, mastered_count,
+/// weak_count, concepts: [≤12 names]}`. Corrupt profiles rebuild from
+/// source data in-memory (no disk write here — listing stays read-only).
+pub fn list_course_entries(index_path: &Path) -> Vec<Value> {
+    if !index_path.exists() {
+        return Vec::new();
+    }
+    let index = read_index(index_path);
+    let mut courses = index["courses"].as_array().cloned().unwrap_or_default();
+    courses.retain(|c| {
+        c.get("course_path")
+            .and_then(|v| v.as_str())
+            .map(|p| Path::new(p).is_dir())
+            .unwrap_or(false)
+    });
+    courses.sort_by_key(|c| {
+        std::cmp::Reverse(c.get("completed_at").and_then(|v| v.as_u64()).unwrap_or(0))
+    });
+    courses.truncate(MAX_COURSES);
+
+    let mut out: Vec<Value> = Vec::new();
+    for entry in &courses {
+        let Some(path) = entry.get("course_path").and_then(|v| v.as_str()) else {
+            continue;
+        };
+        let cp = Path::new(path);
+        let at = entry
+            .get("completed_at")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        let Some(profile) = read_profile(cp).or_else(|| build_completion_profile(cp, at)) else {
+            continue;
+        };
+        let mut mastered = 0u64;
+        let mut weak = 0u64;
+        let mut concepts: Vec<String> = Vec::new();
+        if let Some(arr) = profile.get("concepts").and_then(|v| v.as_array()) {
+            for c in arr {
+                let name = c.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                if name.is_empty() {
+                    continue;
+                }
+                let keep = concepts.len() < MAX_CONCEPTS_SHOWN;
+                match c.get("status").and_then(|v| v.as_str()).unwrap_or("") {
+                    "mastered" => {
+                        mastered += 1;
+                        if keep {
+                            concepts.push(name.to_string());
+                        }
+                    }
+                    "struggling" => {
+                        weak += 1;
+                        if keep {
+                            concepts.push(name.to_string());
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        let mut v = serde_json::json!({
+            "course_path": path,
+            "course_name": profile
+                .get("course_name")
+                .and_then(|x| x.as_str())
+                .unwrap_or("未命名课程"),
+            "completed_at": at,
+            "mastered_count": mastered,
+            "weak_count": weak,
+            "concepts": concepts,
+        });
+        if let Some(ct) = profile.get("course_type") {
+            v["course_type"] = ct.clone();
+        }
+        out.push(v);
+    }
+    out
+}
+
+// ============================================
+// Sprint 23: 学习者画像（learner-persona.json，派生缓存）
+// 唯一真相源仍是各课 completion-profile；此文件可随时删除重建，
+// 本模块对画像只做读/写，绝不在读路径写盘。
+// ============================================
+
+/// Persona cache file beside the global index (same AppData dir).
+pub fn persona_path() -> Option<std::path::PathBuf> {
+    let index = learner_index_path()?;
+    Some(index.parent()?.join("learner-persona.json"))
+}
+
+/// Read the derived persona; None = missing/corrupt (caller rebuilds).
+pub fn read_persona() -> Option<Value> {
+    let p = persona_path()?;
+    let content = std::fs::read_to_string(p).ok()?;
+    let v: Value = serde_json::from_str(&content).ok()?;
+    if v.get("domains")?.as_array()?.is_empty() {
+        return None;
+    }
+    Some(v)
+}
+
+pub fn write_persona(persona: &Value) -> Result<(), String> {
+    let p = persona_path().ok_or("无法定位画像文件路径")?;
+    if let Some(parent) = p.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let s = serde_json::to_string_pretty(persona).map_err(|e| format!("序列化画像失败: {}", e))?;
+    std::fs::write(&p, s).map_err(|e| format!("写入画像失败: {}", e))
+}
+
+/// Persona derivation inputs: fuller picture than the panel entries —
+/// up to MAX_PERSONA_COURSES (12) newest living courses, each with complete
+/// `{name,status}` concepts (mastered ≤25, struggling ≤10 keep the prompt
+/// bounded). Memory *injection* still caps at MAX_COURSES=5; the persona is
+/// deliberately broader because "which domains does this person know" is the
+/// whole point of cross-disciplinary recognition.
+pub fn collect_persona_inputs(index_path: &Path) -> Vec<Value> {
+    const MAX_PERSONA_COURSES: usize = 12;
+    const MAX_MASTERED_IN: usize = 25;
+    const MAX_WEAK_IN: usize = 10;
+    if !index_path.exists() {
+        return Vec::new();
+    }
+    let index = read_index(index_path);
+    let mut courses = index["courses"].as_array().cloned().unwrap_or_default();
+    courses.retain(|c| {
+        c.get("course_path")
+            .and_then(|v| v.as_str())
+            .map(|p| Path::new(p).is_dir())
+            .unwrap_or(false)
+    });
+    courses.sort_by_key(|c| {
+        std::cmp::Reverse(c.get("completed_at").and_then(|v| v.as_u64()).unwrap_or(0))
+    });
+    courses.truncate(MAX_PERSONA_COURSES);
+
+    let mut out: Vec<Value> = Vec::new();
+    for entry in &courses {
+        let Some(path) = entry.get("course_path").and_then(|v| v.as_str()) else {
+            continue;
+        };
+        let cp = Path::new(path);
+        let at = entry
+            .get("completed_at")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        let Some(profile) = read_profile(cp).or_else(|| build_completion_profile(cp, at)) else {
+            continue;
+        };
+        let mut mastered = 0usize;
+        let mut weak = 0usize;
+        let mut concepts: Vec<Value> = Vec::new();
+        if let Some(arr) = profile.get("concepts").and_then(|v| v.as_array()) {
+            for c in arr {
+                let name = c.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                if name.is_empty() {
+                    continue;
+                }
+                let status = c.get("status").and_then(|v| v.as_str()).unwrap_or("");
+                match status {
+                    "mastered" if mastered < MAX_MASTERED_IN => {
+                        mastered += 1;
+                        concepts.push(serde_json::json!({ "name": name, "status": "mastered" }));
+                    }
+                    "struggling" if weak < MAX_WEAK_IN => {
+                        weak += 1;
+                        concepts.push(serde_json::json!({ "name": name, "status": "struggling" }));
+                    }
+                    _ => {}
+                }
+            }
+        }
+        out.push(serde_json::json!({
+            "course_path": path,
+            "course_name": profile
+                .get("course_name")
+                .and_then(|x| x.as_str())
+                .unwrap_or("未命名课程"),
+            "completed_at": at,
+            "concepts": concepts,
+        }));
+    }
+    out
 }
 
 fn read_profile(course_path: &Path) -> Option<Value> {

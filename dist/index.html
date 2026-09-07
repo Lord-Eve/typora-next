@@ -409,41 +409,64 @@
         <button class="modal-close" id="learningModalClose">×</button>
       </div>
       <div class="modal-body" id="learningModalBody">
-        <!-- Step 1: Input Form -->
+        <!-- Step 1: Input Form（Sprint 21 v2: 左表单 + 右学习历史选择面板） -->
         <div id="learningStepInput" class="learning-step">
-          <div class="learning-form-group">
-            <label class="learning-label" for="learningGoal">你想学什么？</label>
-            <input type="text" id="learningGoal" class="learning-input" placeholder="例如：理解 Transformer 的工作原理">
-          </div>
-          <div class="learning-form-group">
-            <label class="learning-label">难度级别</label>
-            <div class="learning-radio-group">
-              <label class="learning-radio">
-                <input type="radio" name="learningLevel" value="beginner">
-                <span>小白</span>
-              </label>
-              <label class="learning-radio">
-                <input type="radio" name="learningLevel" value="intermediate" checked>
-                <span>有一定基础</span>
-              </label>
-              <label class="learning-radio">
-                <input type="radio" name="learningLevel" value="advanced">
-                <span>专业进阶</span>
-              </label>
+          <div class="learning-input-cols">
+            <div class="learning-input-main">
+              <div class="learning-form-group">
+                <label class="learning-label" for="learningGoal">你想学什么？</label>
+                <input type="text" id="learningGoal" class="learning-input" placeholder="例如：理解 Transformer 的工作原理">
+              </div>
+              <div class="learning-form-group">
+                <label class="learning-label">难度级别</label>
+                <div class="learning-radio-group">
+                  <label class="learning-radio">
+                    <input type="radio" name="learningLevel" value="beginner">
+                    <span>小白</span>
+                  </label>
+                  <label class="learning-radio">
+                    <input type="radio" name="learningLevel" value="intermediate" checked>
+                    <span>有一定基础</span>
+                  </label>
+                  <label class="learning-radio">
+                    <input type="radio" name="learningLevel" value="advanced">
+                    <span>专业进阶</span>
+                  </label>
+                </div>
+              </div>
+              <div class="learning-form-group">
+                <label class="learning-label" for="learningHours">预计投入时间</label>
+                <select id="learningHours" class="learning-select">
+                  <option value="1">1 小时</option>
+                  <option value="2">2 小时</option>
+                  <option value="3" selected>3 小时</option>
+                  <option value="5">5 小时</option>
+                  <option value="8">8 小时</option>
+                  <option value="16">16 小时</option>
+                </select>
+              </div>
             </div>
+            <aside class="learner-context-hint learner-memory-col" id="learnerContextHint" style="display: none;">
+              <div class="learner-memory-head">📚 学习历史 <span class="learner-memory-sub" id="learnerMemorySub"></span></div>
+              <div class="learner-memory-help" id="learnerMemoryHelp">勾选的课程会作为「已知基础」注入本次大纲：已掌握的简化跳过，薄弱的安排衔接复习；不勾选则从零规划。输入学习目标后，AI 会自动把相关课程排在前面。</div>
+              <div class="learner-persona-row" id="learnerPersonaRow" style="display: none;">👤 <span id="learnerPersonaSummary"></span><span class="lpr-caret">▼</span></div>
+              <div class="learner-persona-detail" id="learnerPersonaDetail" style="display: none;">
+                <div class="learner-persona-chips" id="learnerPersonaChips"></div>
+                <div class="learner-persona-samples" id="learnerPersonaSamples"></div>
+                <div class="learner-persona-sources" id="learnerPersonaSources"></div>
+                <div class="learner-persona-actions">
+                  <label><input type="checkbox" id="learnerPersonaToggle" checked> 本次规划使用画像</label>
+                  <button type="button" class="learner-persona-rebuild" id="learnerPersonaRebuild">重建画像</button>
+                </div>
+              </div>
+              <input type="search" class="learner-memory-search" id="learnerMemorySearch" placeholder="搜索课程 / 概念…" autocomplete="off">
+              <div class="learner-memory-status" id="learnerMemoryStatus" style="display: none;">
+                <span id="learnerMemoryStatusText"></span>
+                <button type="button" class="learner-memory-reject" id="learnerMemoryReject" style="display: none;">不采纳</button>
+              </div>
+              <div class="learner-memory-list" id="learnerMemoryList"></div>
+            </aside>
           </div>
-          <div class="learning-form-group">
-            <label class="learning-label" for="learningHours">预计投入时间</label>
-            <select id="learningHours" class="learning-select">
-              <option value="1">1 小时</option>
-              <option value="2">2 小时</option>
-              <option value="3" selected>3 小时</option>
-              <option value="5">5 小时</option>
-              <option value="8">8 小时</option>
-              <option value="16">16 小时</option>
-            </select>
-          </div>
-          <div class="learner-context-hint" id="learnerContextHint" style="display: none;"></div>
           <div class="learning-error" id="learningError" style="display: none;"></div>
         </div>
 

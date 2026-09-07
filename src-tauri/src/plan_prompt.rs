@@ -16,11 +16,15 @@ use serde_json::Value;
 /// `learner_profile::aggregate_learner_context`. `None` (or empty) produces a
 /// prompt byte-identical to the pre-Sprint-21 form — users with no completed
 /// courses see zero behavior change.
+/// `persona_section` (Sprint 23): rendered learner-persona block from
+/// `persona_prompt::render_persona_block` (domains + analogy material + the
+/// analogy directive). `None`/empty → prompt identical to pre-Sprint-23.
 pub fn build_plan_prompt(
     goal: &str,
     level: &str,
     hours: u32,
     learner_context: Option<&str>,
+    persona_section: Option<&str>,
 ) -> String {
     let level_names = [
         ("beginner", "小白（零基础）"),
@@ -50,6 +54,10 @@ pub fn build_plan_prompt(
         })
         .unwrap_or_default();
 
+    let persona_block = persona_section
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_default();
+
     format!(
         r#"你是一个资深的学习设计师。请根据以下信息设计一个结构化的学习大纲。
 
@@ -57,7 +65,7 @@ pub fn build_plan_prompt(
 难度级别：{level_label}
 预计投入时间：{hours} 小时
 
-{learner_section}要求：
+{learner_section}{persona_block}要求：
 1. 大纲要深入浅出、逻辑连贯
 2. 从基础到进阶，循序渐进
 3. 每章包含：标题、预计时长（分钟）、涉及的核心概念
@@ -88,6 +96,7 @@ pub fn build_plan_prompt(
         level_label = level_label,
         hours = hours,
         learner_section = learner_section,
+        persona_block = persona_block,
     )
 }
 

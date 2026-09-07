@@ -18,9 +18,12 @@ pub mod explain_parse;
 pub mod frontmatter;
 pub mod learner_profile;
 pub mod learning_paths;
+pub mod llm_body;
 pub mod mac_pdf;
+pub mod memory_rank;
 pub mod mermaid_fix_log;
 pub mod paper_import;
+pub mod persona_prompt;
 pub mod plan_prompt;
 pub mod quiz_quality;
 pub mod roadmap_prompt;
@@ -773,11 +776,7 @@ async fn test_llm_config(config: AppConfig) -> Result<(), String> {
         }
         AiProvider::Openai => {
             let url = format!("{}/v1/chat/completions", base_url.trim_end_matches('/'));
-            let req = serde_json::json!({
-                "model": model,
-                "max_tokens": 1,
-                "messages": [{"role": "user", "content": test_message}]
-            });
+            let req = llm_body::openai_chat_body(&model, 1, test_message, &base_url);
             let resp = ureq::post(&url)
                 .set("Content-Type", "application/json")
                 .set("Authorization", &format!("Bearer {}", api_key))
@@ -903,7 +902,9 @@ async fn export_word(
             let image = docx_template::render_svg_to_mermaid_image(&info.svg).ok()?;
             log_export(&format!(
                 "[export_word] mermaid 图片 {}x{} ({} bytes)",
-                image.width_px, image.height_px, image.bytes.len()
+                image.width_px,
+                image.height_px,
+                image.bytes.len()
             ));
             Some((source, image))
         })
@@ -1717,20 +1718,9 @@ async fn fix_mermaid(code: String, error: String, app: tauri::AppHandle) -> Resu
             }
             AiProvider::Openai => {
                 let url = format!("{}/v1/chat/completions", base_url.trim_end_matches('/'));
-                let mut req = serde_json::json!({
-                    "model": model,
-                    "max_tokens": 4096,
-                    "messages": [{"role": "user", "content": prompt}]
-                });
-                // DeepSeek 思考型模型（如 deepseek-v4-flash）：reasoning 与正文
-                // 共享 max_tokens，思考可能耗尽预算导致 content 为空
-                // （finish_reason=length，2026-09-03 实机复现）。修复 mermaid
-                // 是机械任务，不需要思考——官方 API 用 thinking.type=disabled 关闭。
-                // 只对 deepseek 官方端点注入，避免其他 OpenAI 兼容服务
-                // 因未知字段返回 400。
-                if base_url.contains("deepseek.com") {
-                    req["thinking"] = serde_json::json!({"type": "disabled"});
-                }
+                // DeepSeek 思考型模型注入 thinking=disabled 的逻辑收敛在
+                // llm_body::openai_chat_body（2026-09-03 空结果事故后统一）
+                let req = llm_body::openai_chat_body(&model, 4096, &prompt, &base_url);
                 let resp = ureq::post(&url)
                     .set("Content-Type", "application/json")
                     .set("Authorization", &format!("Bearer {}", api_key))
@@ -1965,11 +1955,7 @@ async fn translate_text(
         }
         AiProvider::Openai => {
             let url = format!("{}/v1/chat/completions", base_url.trim_end_matches('/'));
-            let req = serde_json::json!({
-                "model": model,
-                "max_tokens": 4096,
-                "messages": [{"role": "user", "content": prompt}]
-            });
+            let req = llm_body::openai_chat_body(&model, 4096, &prompt, &base_url);
             let resp = ureq::post(&url)
                 .set("Content-Type", "application/json")
                 .set("Authorization", &format!("Bearer {}", api_key))
@@ -2701,6 +2687,16 @@ async fn persist_quiz_result(
 async fn list_learner_courses() -> Result<Vec<String>, String> {
     Ok(learner_profile::learner_index_path()
         .map(|p| learner_profile::list_valid_course_names(&p))
+        .unwrap_or_default())
+}
+
+/// Sprint 21 v2: full entries for the memory selection panel (right rail of
+/// the create dialog). Newest-first, counts + concept names for search.
+/// Empty when nothing indexed. Read-only — never writes the index.
+#[tauri::command]
+async fn list_learner_courses_detail() -> Result<Vec<serde_json::Value>, String> {
+    Ok(learner_profile::learner_index_path()
+        .map(|p| learner_profile::list_course_entries(&p))
         .unwrap_or_default())
 }
 
@@ -4586,6 +4582,9 @@ pub fn run() {
             read_quiz_history,
             backfill_completion_profile,
             list_learner_courses,
+            list_learner_courses_detail,
+            ai_agent::rank_learner_courses,
+            ai_agent::get_learner_persona,
             read_text_file,
             persist_chapter_file,
             exit_app,
