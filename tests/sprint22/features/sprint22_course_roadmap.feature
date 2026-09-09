@@ -32,6 +32,7 @@ Feature: 结课 roadmap（📍 下一站）与课程总结功能删除
     And the dashboard should render the roadmap section only for completed courses
     And project-resume should pass projectPath to the dashboard
     And card click should prefill the create dialog without submitting
+    And dashboard should place roadmap on the left of the graph
 
   Scenario: 换一批与意向 chip
     Given the real frontend sources for roadmap

@@ -506,6 +506,208 @@ TestRunner.test('onEnterReading callback is called with chapter', () => {
 });
 
 // ============================================
+// Test: 脏图谱韧性（生成失败项目的 graph.json 残留悬空边）
+// ============================================
+
+// 模拟真实 d3 行为：forceLink 遇到端点不在 nodes 中的边时同步抛 "node not found"
+function makeD3Mock({ forceThrow } = {}) {
+  // 记录 attr('transform', ...) 调用次数 —— 回归测试用：
+  // 真实 d3 中手动 simulation.tick() 不派发 tick 事件，若渲染代码只依赖事件，
+  // 预跑后 DOM 永不刷新（全节点重叠在原点），这里就能抓到
+  const calls = { transformAttrs: 0 };
+  const chain = new Proxy(function () {}, {
+    get: () => chain,
+    apply: (t, thisArg, args) => {
+      if (args[0] === 'transform') calls.transformAttrs++;
+      return chain;
+    }
+  });
+  let simNodes = null;
+  return {
+    select: () => chain,
+    zoom: () => chain,
+    drag: () => chain,
+    zoomIdentity: { translate() { return { scale() { return {}; } }; } },
+    forceSimulation: (nodes) => {
+      if (forceThrow) throw forceThrow;
+      simNodes = nodes;
+      return chain;
+    },
+    forceLink: (edges) => {
+      if (simNodes && edges) {
+        const ids = new Set(simNodes.map(n => n.id));
+        for (const e of edges) {
+          if (!ids.has(e.source)) throw new Error('node not found: ' + e.source);
+          if (!ids.has(e.target)) throw new Error('node not found: ' + e.target);
+        }
+      }
+      return chain;
+    },
+    forceManyBody: () => chain,
+    forceCenter: () => chain,
+    forceX: () => chain,
+    forceY: () => chain,
+    forceCollide: () => chain,
+    _calls: calls
+  };
+}
+
+TestRunner.test('dirty graph: dangling edge filtered, dashboard still closable', () => {
+  setupEnv();
+  const KGD = loadDashboard();
+  if (!KGD) return;
+
+  global.d3 = makeD3Mock();
+  try {
+    // 生成失败项目的 graph.json：边引用了已不存在的概念 'ghost'
+    const graph = makeGraphData(
+      [['a', '概念A', '01'], ['b', '概念B', '02']],
+      [['a', 'b'], ['a', 'ghost']]
+    );
+    const dashboard = new KGD();
+    dashboard.show({
+      graph,
+      stats: makeStats({ total: 2, notStarted: 2 }),
+      chapters: makeChapters(['第一章', '第二章']),
+      projectName: '失败项目'
+    });
+
+    TestRunner.assertEquals(dashboard.getState(), 'visible',
+      'dangling edge must not break show() (modal stuck in hidden state → close dead)');
+
+    const btn = document.querySelector('[data-action="close"]');
+    TestRunner.assertExists(btn, 'close button should exist');
+    btn.click();
+    TestRunner.assertEquals(dashboard.getState(), 'hidden', 'close button should hide modal');
+  } finally {
+    delete global.d3;
+  }
+});
+
+TestRunner.test('render error: canvas shows fallback and modal stays closable', () => {
+  setupEnv();
+  const KGD = loadDashboard();
+  if (!KGD) return;
+
+  global.d3 = makeD3Mock({ forceThrow: new Error('simulated render failure') });
+  try {
+    let onCloseFired = false;
+    const graph = makeGraphData([['a', '概念A', '01']], []);
+    const dashboard = new KGD({ onClose: () => { onCloseFired = true; } });
+    dashboard.show({
+      graph,
+      stats: makeStats({ total: 1, notStarted: 1 }),
+      chapters: makeChapters(['第一章']),
+      projectName: '失败项目'
+    });
+
+    TestRunner.assertEquals(dashboard.getState(), 'visible',
+      'render failure must not break show() state machine');
+
+    const canvas = document.querySelector('.kg-graph-canvas');
+    TestRunner.assertExists(canvas, 'graph canvas should exist');
+    TestRunner.assert((canvas.textContent || '').includes('渲染失败'),
+      'canvas should show fallback message on render failure');
+
+    dashboard.close();
+    TestRunner.assertEquals(dashboard.getState(), 'hidden');
+    TestRunner.assert(onCloseFired, 'onClose callback should fire');
+    const overlays = document.querySelectorAll('.kg-dashboard-overlay');
+    TestRunner.assertEquals(overlays.length, 0, 'overlay should be removed after close');
+  } finally {
+    delete global.d3;
+  }
+});
+
+// ============================================
+// Test: 图谱自适应全图展示（fit-to-view 纯函数）
+// ============================================
+
+TestRunner.test('computeFitTransform: spreads beyond viewport shrink to fit', () => {
+  setupEnv();
+  const KGD = loadDashboard();
+  if (!KGD) return;
+
+  // 节点散布远超 700x400 视口
+  const nodes = [
+    { id: 'a', x: -500, y: -300 },
+    { id: 'b', x: 800, y: 500 }
+  ];
+  const f = KGD.computeFitTransform(nodes, 700, 400);
+  TestRunner.assertExists(f, 'should return a transform');
+  TestRunner.assert(f.k < 1, 'should shrink (k < 1)');
+
+  // 变换后所有节点落在视口内
+  for (const n of nodes) {
+    const sx = n.x * f.k + f.x;
+    const sy = n.y * f.k + f.y;
+    TestRunner.assert(sx >= 0 && sx <= 700, `node ${n.id} x=${sx} should be inside viewport`);
+    TestRunner.assert(sy >= 0 && sy <= 400, `node ${n.id} y=${sy} should be inside viewport`);
+  }
+});
+
+TestRunner.test('computeFitTransform: small graph is not oversized', () => {
+  setupEnv();
+  const KGD = loadDashboard();
+  if (!KGD) return;
+
+  // 小图谱挤在一小片区域 —— 不能无限放大
+  const nodes = [{ id: 'a', x: 350, y: 200 }, { id: 'b', x: 360, y: 210 }];
+  const f = KGD.computeFitTransform(nodes, 700, 400);
+  TestRunner.assertExists(f);
+  TestRunner.assert(f.k <= 1.2, `k=${f.k} should be capped (no oversize zoom-in)`);
+});
+
+TestRunner.test('computeFitTransform: huge graph is not too small', () => {
+  setupEnv();
+  const KGD = loadDashboard();
+  if (!KGD) return;
+
+  const nodes = [{ id: 'a', x: -100000, y: -100000 }, { id: 'b', x: 100000, y: 100000 }];
+  const f = KGD.computeFitTransform(nodes, 700, 400);
+  TestRunner.assertExists(f);
+  TestRunner.assert(f.k >= 0.4, `k=${f.k} should be floored (not too small)`);
+});
+
+TestRunner.test('computeFitTransform: empty nodes returns null', () => {
+  setupEnv();
+  const KGD = loadDashboard();
+  if (!KGD) return;
+
+  TestRunner.assertEquals(KGD.computeFitTransform([], 700, 400), null, 'empty → null');
+  TestRunner.assertEquals(KGD.computeFitTransform(null, 700, 400), null, 'null → null');
+});
+
+TestRunner.test('pre-run ticks are flushed to DOM (manual tick fires no events)', () => {
+  setupEnv();
+  const KGD = loadDashboard();
+  if (!KGD) return;
+
+  const mock = makeD3Mock();
+  global.d3 = mock;
+  try {
+    const graph = makeGraphData(
+      [['a', '概念A', '01'], ['b', '概念B', '02']],
+      [['a', 'b']]
+    );
+    const dashboard = new KGD();
+    dashboard.show({
+      graph,
+      stats: makeStats({ total: 2, notStarted: 2 }),
+      chapters: makeChapters(['第一章', '第二章']),
+      projectName: '测试项目'
+    });
+
+    // 真实 d3 的手动 simulation.tick() 不派发 tick 事件 —— 渲染代码必须
+    // 在预跑后主动刷新一次 DOM，否则所有节点停在初始位置（全部重叠）
+    TestRunner.assert(mock._calls.transformAttrs > 0,
+      'node transform must be written to DOM at least once after pre-run ticks');
+  } finally {
+    delete global.d3;
+  }
+});
+
+// ============================================
 // Run
 // ============================================
 

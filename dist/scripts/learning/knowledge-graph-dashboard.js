@@ -12,6 +12,7 @@
   if (typeof window === 'undefined') return;
 
   // Shared constants (from knowledge-graph-manager.js)
+
   const CONSTANTS = window.KNOWLEDGE_GRAPH_CONSTANTS || {};
   const STATUS_LABELS = CONSTANTS.STATUS_LABELS || {
     mastered: '已掌握', learning: '学习中', struggling: '困难', not_started: '未开始'
@@ -19,6 +20,41 @@
   const STATUS_COLORS = CONSTANTS.STATUS_COLORS || {
     mastered: '#10b981', learning: '#f59e0b', struggling: '#ef4444', not_started: '#6b7280'
   };
+
+  // 图谱自适应缩放上下限：小图谱不放大 oversize，大图谱不缩得过小
+  const FIT_MIN_SCALE = 0.4;
+  const FIT_MAX_SCALE = 1.2;
+  const FIT_PADDING = 48;
+
+  /**
+   * 纯函数：按节点包围盒计算 fit-to-view 变换，使全图在任何屏幕上完整展示。
+   * @param {Array} nodes - 已定位节点（需有数值 x/y）
+   * @returns {{x: number, y: number, k: number} | null} 平移 + 缩放，无节点返回 null
+   */
+  function computeFitTransform(nodes, width, height) {
+    const positioned = (nodes || []).filter(n => typeof n.x === 'number' && typeof n.y === 'number');
+    if (!positioned.length) return null;
+
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const n of positioned) {
+      if (n.x < minX) minX = n.x;
+      if (n.x > maxX) maxX = n.x;
+      if (n.y < minY) minY = n.y;
+      if (n.y > maxY) maxY = n.y;
+    }
+
+    const w = Math.max(maxX - minX, 1);
+    const h = Math.max(maxY - minY, 1);
+    const k = Math.max(
+      FIT_MIN_SCALE,
+      Math.min((width - FIT_PADDING * 2) / w, (height - FIT_PADDING * 2) / h, FIT_MAX_SCALE)
+    );
+    return {
+      x: width / 2 - ((minX + maxX) / 2) * k,
+      y: height / 2 - ((minY + maxY) / 2) * k,
+      k
+    };
+  }
 
   class KnowledgeGraphDashboard {
     constructor(options) {
@@ -43,7 +79,14 @@
         this.close();
       }
       this._data = data;
-      this._createDOM(data);
+      try {
+        this._createDOM(data);
+      } catch (e) {
+        // 清理已上屏的 overlay：state 尚未置 visible，不清理会留下
+        // close() 无法移除的僵尸弹窗（close 在 hidden 态 early-return）
+        this._removeDOM();
+        throw e;
+      }
       this.state = 'visible';
       this._bindESC();
     }
@@ -100,6 +143,8 @@
           }
         });
         modal.appendChild(section);
+        // roadmap 移到图谱左侧（下方挤压图谱且小屏截断）—— CSS grid 双列布局
+        modal.classList.add('kg-dashboard-modal--has-roadmap');
       }
 
       // Action buttons
@@ -113,7 +158,13 @@
       // D3 渲染推迟到 DOM 插入后：此时 flex 布局已算出 canvas 真实宽高，
       // svg 按 clientHeight 绘制，图谱始终完整落在可视区域内
       if (graphCanvas && typeof d3 !== 'undefined') {
-        this._renderD3Graph(graphCanvas, data.graph);
+        try {
+          this._renderD3Graph(graphCanvas, data.graph);
+        } catch (e) {
+          // 渲染失败（如脏 graph.json）不应卡死整个弹窗 —— 降级为提示文案
+          console.warn('[KnowledgeGraphDashboard] graph render failed:', e);
+          graphCanvas.textContent = '图谱渲染失败：' + (e.message || String(e));
+        }
       }
     }
 
@@ -190,7 +241,12 @@
       // 高度取 flex 布局后的真实高度，兜底 400（jsdom/旧调用路径）
       const height = container.clientHeight || 400;
       const nodes = (graph.nodes || []).map(n => ({ ...n }));
-      const edges = (graph.edges || []).map(e => ({ source: e.from, target: e.to }));
+      // 生成失败/部分再生成的项目，graph.json 可能残留悬空边（端点概念已不存在），
+      // d3.forceLink 遇到会同步抛 "node not found" —— 渲染前过滤
+      const nodeIds = new Set(nodes.map(n => n.id));
+      const edges = (graph.edges || [])
+        .map(e => ({ source: e.from, target: e.to }))
+        .filter(e => nodeIds.has(e.source) && nodeIds.has(e.target));
 
       // Build adjacency for hover highlight
       const connected = {};
@@ -215,12 +271,12 @@
         .attr('height', height)
         .attr('viewBox', `0 0 ${width} ${height}`);
 
-      // Zoom behavior
+      // Zoom behavior（留存引用：布局稳定后用于 fit-to-view）
       const zoomGroup = svg.append('g');
-      svg.call(d3.zoom()
+      const zoomBehavior = d3.zoom()
         .scaleExtent([0.3, 3])
-        .on('zoom', (e) => zoomGroup.attr('transform', e.transform))
-      );
+        .on('zoom', (e) => zoomGroup.attr('transform', e.transform));
+      svg.call(zoomBehavior);
 
       // Arrow marker for directed edges
       svg.append('defs').append('marker')
@@ -314,14 +370,28 @@
       });
 
       // Tick update
-      simulation.on('tick', () => {
+      const ticked = () => {
         link
           .attr('x1', d => d.source.x)
           .attr('y1', d => d.source.y)
           .attr('x2', d => d.target.x)
           .attr('y2', d => d.target.y);
         nodeGroup.attr('transform', d => `translate(${d.x},${d.y})`);
-      });
+      };
+      simulation.on('tick', ticked);
+
+      // 自适应全图：同步预跑布局（不等 alpha 自然冷却 ~4s），立即 fit 全图。
+      // 注意：手动 simulation.tick() 不派发 tick 事件（d3 只在内部 timer 里派发），
+      // 预跑后必须手动调一次 ticked() 刷新 DOM，否则画面停在初始位置（全部重叠）。
+      // 预跑后停掉 simulation，图谱静止稳定；拖拽时 drag start 会自行 restart
+      const INITIAL_TICKS = 150;
+      for (let i = 0; i < INITIAL_TICKS; i++) simulation.tick();
+      ticked();
+      simulation.stop();
+      const fit = computeFitTransform(nodes, width, height);
+      if (fit) {
+        svg.call(zoomBehavior.transform, d3.zoomIdentity.translate(fit.x, fit.y).scale(fit.k));
+      }
     }
 
     _createChapterList(chapters) {
@@ -466,4 +536,6 @@
   }
 
   window.KnowledgeGraphDashboard = KnowledgeGraphDashboard;
+  // 纯函数导出（fit-to-view 单测）
+  KnowledgeGraphDashboard.computeFitTransform = computeFitTransform;
 })();

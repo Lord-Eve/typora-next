@@ -189,6 +189,17 @@ steps.then('styles for roadmap cards should exist', function () {
   }
 });
 
+steps.then('dashboard should place roadmap on the left of the graph', function () {
+  // 实机反馈：roadmap 在图谱下方交互差且截断 —— 改左侧栏 grid 布局
+  if (!this.learningCss.includes('.kg-dashboard-modal--has-roadmap')) {
+    throw new Error('learning.css missing .kg-dashboard-modal--has-roadmap left-column layout');
+  }
+  const dashboardJs = read(path.join(DIST, 'scripts/learning/knowledge-graph-dashboard.js'));
+  if (!dashboardJs.includes('kg-dashboard-modal--has-roadmap')) {
+    throw new Error('dashboard JS does not add --has-roadmap modifier');
+  }
+});
+
 // ============================================
 // PB22-3: 课程总结删除（反向断言）
 // ============================================

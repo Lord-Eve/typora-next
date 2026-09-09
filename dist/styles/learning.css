@@ -1650,6 +1650,10 @@ body.learning-mode .toolbar {
 .kg-dashboard-header {
   margin-bottom: 24px;
   position: relative;
+  /* 完结徽标与标题同行（右侧），不再独占一行 */
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 .kg-dashboard-header::after {
   content: '';
@@ -1671,22 +1675,22 @@ body.learning-mode .toolbar {
 /* Stats row */
 .kg-stats-row {
   display: flex;
-  gap: 16px;
-  margin-bottom: 24px;
+  gap: 10px;
+  margin-bottom: 16px;
 }
 
 .kg-stat-item {
   flex: 1;
-  padding: 12px 16px;
+  padding: 6px 10px;
   background: var(--color-bg-secondary);
-  border-radius: 12px;
+  border-radius: 8px;
   border: 1px solid var(--color-border);
   text-align: center;
 }
 
 .kg-stat-number {
   display: block;
-  font-size: 24px;
+  font-size: 18px;
   font-weight: 700;
   /* 默认用 accent，JS 会按状态覆盖 inline color */
   color: var(--color-accent);
@@ -1694,9 +1698,9 @@ body.learning-mode .toolbar {
 
 .kg-stat-label {
   display: block;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--color-text-muted);
-  margin-top: 4px;
+  margin-top: 2px;
 }
 
 /* Graph canvas (D3 force-directed) */
@@ -3803,7 +3807,8 @@ body.learning-mode .toolbar {
 /* Sprint 16: 课程完结终态徽标 */
 .kg-course-completed-badge {
   display: inline-block;
-  margin-top: 8px;
+  margin-top: 0;
+  flex-shrink: 0;
   padding: 4px 12px;
   font-size: 13px;
   font-weight: 600;
@@ -3945,6 +3950,59 @@ body.learning-mode .toolbar {
   min-height: 220px;
 }
 
+/* 图谱 + roadmap 同屏时（完结课程），小屏幕下 roadmap 会把 actions 挤出
+   88vh 的 overflow:hidden 容器 —— 允许 roadmap 收缩并内部滚动 */
+.kg-dashboard-modal--has-graph .roadmap-section {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 32vh;
+  overflow-y: auto;
+}
+
+/* 实机反馈：roadmap 放图谱下方交互差 —— 改左侧栏。
+   有 roadmap 时 modal 加宽并切 grid 双列：左 roadmap、右图谱 */
+.kg-dashboard-modal--has-graph.kg-dashboard-modal--has-roadmap {
+  display: grid;
+  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "header header"
+    "stats stats"
+    "roadmap canvas"
+    "actions actions";
+  column-gap: 18px;
+  width: min(1080px, 94vw);
+}
+
+.kg-dashboard-modal--has-roadmap .kg-dashboard-header { grid-area: header; }
+.kg-dashboard-modal--has-roadmap .kg-stats-row { grid-area: stats; }
+.kg-dashboard-modal--has-roadmap .kg-graph-canvas { grid-area: canvas; }
+.kg-dashboard-modal--has-roadmap .kg-actions { grid-area: actions; }
+.kg-dashboard-modal--has-roadmap .roadmap-section {
+  grid-area: roadmap;
+  margin-top: 0;
+  border-top: none;
+  padding-top: 0;
+  max-height: none;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* 窄屏回退：单列纵向，roadmap 仍在下方并内部滚动 */
+@media (max-width: 720px) {
+  .kg-dashboard-modal--has-graph.kg-dashboard-modal--has-roadmap {
+    display: flex;
+    flex-direction: column;
+    width: 780px;
+    max-width: 92vw;
+  }
+  .kg-dashboard-modal--has-roadmap .roadmap-section {
+    max-height: 32vh;
+    border-top: 1px solid var(--color-border, #e0e0e4);
+    padding-top: 12px;
+  }
+}
+
 /* ============================================
    Panel ↔ Orb 收起/展开动画
    课程面板收回时缩小淡入右下角的悬浮球；
@@ -3977,4 +4035,29 @@ body.learning-mode .toolbar {
   .learning-expanding-from-orb {
     animation: none;
   }
+}
+
+/* Sprint 26: 人文课试听嵌入卡片（wikimedia-commons skill 输出） */
+.audio-embed {
+  margin: 12px 0;
+  padding: 12px 16px;
+  background: #F1EFE8;
+  border-radius: 10px;
+}
+.audio-embed audio {
+  width: 100%;
+  display: block;
+}
+.audio-credit {
+  margin-top: 6px;
+  font-size: 12px;
+  opacity: 0.75;
+  color: #44403a;
+}
+.audio-fallback {
+  font-size: 14px;
+  color: #44403a;
+}
+.audio-fallback a {
+  color: inherit;
 }
