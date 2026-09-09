@@ -375,6 +375,15 @@ async function runAcceptanceTests() {
   totalPassed += latexResult.passed;
   totalFailed += latexResult.failed;
 
+  // Sprint 27: 更新进度可见性 + 代理感知（issue #6）
+  const updateProgressSteps = require('./sprint27_update_progress.steps');
+  const updateProgressResult = await runFeatureFile(
+    path.join(__dirname, '../sprint27/features/sprint27_update_progress.feature'),
+    updateProgressSteps
+  );
+  totalPassed += updateProgressResult.passed;
+  totalFailed += updateProgressResult.failed;
+
   if (sprint10Steps._cleanup) sprint10Steps._cleanup.call({});
   if (paperImportSteps._cleanup) paperImportSteps._cleanup.call({});
   if (toolbarTooltipSteps._cleanup) toolbarTooltipSteps._cleanup.call({});

@@ -25,6 +25,7 @@ pub mod mermaid_fix_log;
 pub mod paper_import;
 pub mod persona_prompt;
 pub mod plan_prompt;
+pub mod proxy_config;
 pub mod quiz_quality;
 pub mod roadmap_prompt;
 pub mod sdk_install;
@@ -817,6 +818,12 @@ fn get_app_info(app: tauri::AppHandle) -> AppInfo {
         identifier: app.config().identifier.clone(),
         platform: std::env::consts::OS.to_string(),
     }
+}
+
+/// 探测更新检查可用的代理 URL（env → Windows 注册表；Sprint 27）
+#[tauri::command]
+fn get_proxy_config() -> Option<String> {
+    proxy_config::get_proxy_config()
 }
 
 /// Show the given file in the system file manager
@@ -4622,7 +4629,8 @@ pub fn run() {
             mac_pdf::export_pdf,
             create_project_subdir,
             get_demo_file,
-            get_app_info
+            get_app_info,
+            get_proxy_config
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

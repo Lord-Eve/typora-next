@@ -22,8 +22,17 @@
 
       try {
         const { invoke } = window.__TAURI__.core;
+        // Sprint 27：插件的 reqwest 未启用 system-proxy，GUI 进程也继承不到
+        // 终端的 HTTPS_PROXY——由 Rust 侧探测（env → Windows 注册表）后显式传入。
+        // Update 资源在 check 时固化代理配置，download_and_install 自动沿用。
+        let proxy = null;
+        try {
+          proxy = await invoke('get_proxy_config');
+        } catch (e) {
+          console.warn('[Updater] Proxy probe failed, using direct connection:', e);
+        }
         // IPC command registered by tauri-plugin-updater
-        const result = await invoke('plugin:updater|check');
+        const result = await invoke('plugin:updater|check', proxy ? { proxy } : {});
 
         if (!result) {
           return { available: false };
@@ -49,8 +58,9 @@
         // Updater not configured (missing pubkey, no endpoint) — not an error, just no updates
         if (err && typeof err === 'string' && err.includes('updater')) {
           console.log('[Updater] Not configured:', err);
-          return { available: false, error: '未配置更新服务' };
+          return { available: false, error: '未配置更新服务', notConfigured: true };
         }
+        // Sprint 27：网络等其他失败必须透出真实错误，不能误诊为「未配置」
         console.warn('[Updater] Check failed:', err);
         return { available: false, error: String(err) };
       }

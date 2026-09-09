@@ -140,6 +140,7 @@ window.agentBridge = {
     aboutModalClose: document.getElementById('aboutModalClose'),
     aboutModalCloseBtn: document.getElementById('aboutModalCloseBtn'),
     aboutVersion: document.getElementById('aboutVersion'),
+    versionChip: document.getElementById('versionChip'),
     aboutPlatform: document.getElementById('aboutPlatform'),
     aboutIdentifier: document.getElementById('aboutIdentifier'),
 
@@ -5452,15 +5453,16 @@ window.agentBridge = {
           statusEl.className = 'about-update-status update-available';
         }
         // Ask user if they want to update now
-        if (!showStatusEl) {
-          // Auto-detected on startup — show a lightweight notification
-          askUpdateConfirmation(result);
-        }
+        // Sprint 27：手动检查（About 面板）也弹横幅——否则「请更新」没有安装入口
+        askUpdateConfirmation(result);
       } else {
         showUpdateBadge(false);
         if (statusEl) {
           if (result.error) {
-            statusEl.textContent = '更新服务未配置，请设置 GitHub Release';
+            // Sprint 27：仅真正未配置时提示未配置；网络等失败透出真实错误
+            statusEl.textContent = result.notConfigured
+              ? '更新服务未配置，请设置 GitHub Release'
+              : '检查更新失败：' + result.error;
             statusEl.className = 'about-update-status error';
           } else {
             statusEl.textContent = '已是最新版本 ✓';
@@ -5517,6 +5519,7 @@ window.agentBridge = {
       <div class="update-notif-content">
         <span class="update-notif-icon">📦</span>
         <span class="update-notif-text">发现新版本 <strong>${update.version}</strong></span>
+        <span class="update-notif-hint">更新包将从 GitHub 发布页下载，网络较慢时请耐心等待</span>
         <div class="update-notif-actions">
           <button class="update-notif-btn update-notif-primary" id="updateNotifInstall">更新</button>
           <button class="update-notif-btn update-notif-skip" id="updateNotifSkip">稍后</button>
@@ -5531,8 +5534,7 @@ window.agentBridge = {
 
     // Wire up buttons
     document.getElementById('updateNotifInstall').addEventListener('click', () => {
-      notif.classList.remove('show');
-      setTimeout(() => notif.remove(), 300);
+      // 不移除横幅——performUpdate 会把它原地变形为进度卡片（Sprint 27）
       if (window.__updateConfirmResolve) window.__updateConfirmResolve(true);
     });
     document.getElementById('updateNotifSkip').addEventListener('click', () => {
@@ -5547,16 +5549,52 @@ window.agentBridge = {
     });
   }
 
+  // Sprint 27：把更新横幅原地变形为进度卡片（常驻可见，不依赖 About 面板）
+  function renderUpdateProgress(banner, state) {
+    let host = banner;
+    if (!host) {
+      // 兜底：横幅不存在时新建一张进度卡片
+      host = document.createElement('div');
+      host.id = 'updateNotification';
+      host.className = 'update-notification show';
+      document.body.appendChild(host);
+    }
+    const UP = window.UpdateProgress;
+    const text = UP.statusText(state);
+    const failed = state.phase === 'failed';
+    const showBar = state.phase === 'downloading';
+    const indeterminate = showBar && state.totalBytes <= 0;
+    host.innerHTML = `
+      <div class="update-notif-content">
+        <span class="update-notif-icon">${failed ? '⚠️' : '📦'}</span>
+        <span class="update-notif-text">${text}</span>
+        ${showBar ? `<div class="update-progress-track"><div class="update-progress-fill${indeterminate ? ' indeterminate' : ''}"${indeterminate ? '' : ` style="width:${state.percent}%"`}></div></div>` : ''}
+      </div>
+      ${failed ? '<button class="update-notif-close" id="updateNotifClose">&times;</button>' : ''}
+    `;
+    if (failed) {
+      document.getElementById('updateNotifClose').addEventListener('click', () => {
+        host.classList.remove('show');
+        setTimeout(() => host.remove(), 300);
+      });
+    }
+  }
+
   async function performUpdate(update) {
     if (!update) return;
+    const UP = window.UpdateProgress;
+    const banner = document.getElementById('updateNotification');
+    let state = UP.createDownloadState(update.version);
     try {
-      if (elements.updateStatus) {
-        elements.updateStatus.textContent = '正在下载更新…';
-        elements.updateStatus.className = 'about-update-status checking';
-      }
+      renderUpdateProgress(banner, state);
 
-      await update.downloadAndInstall();
+      await update.downloadAndInstall((ev) => {
+        state = UP.applyDownloadEvent(state, ev);
+        renderUpdateProgress(banner, state);
+      });
 
+      state = UP.applySuccess(state);
+      renderUpdateProgress(banner, state);
       if (elements.updateStatus) {
         elements.updateStatus.textContent = '更新已下载，正在重启…';
       }
@@ -5565,8 +5603,10 @@ window.agentBridge = {
       await window.Updater.restart();
     } catch (err) {
       console.error('[Update] Download/install failed:', err);
+      state = UP.applyFailure(state, err);
+      renderUpdateProgress(banner, state);
       if (elements.updateStatus) {
-        elements.updateStatus.textContent = '更新失败：' + (err.message || String(err));
+        elements.updateStatus.textContent = UP.statusText(state);
         elements.updateStatus.className = 'about-update-status error';
       }
     }
@@ -5707,6 +5747,7 @@ window.agentBridge = {
     loadUIState();
     checkPlatform();
     initAgentStatusIndicator();
+    fillVersionChip();
 
     console.log('Typora Next initialized');
 
@@ -5719,6 +5760,17 @@ window.agentBridge = {
   function checkPlatform() {
     // Platform-specific UI adjustments go here.
     // Word export is now available on all platforms via Rust native converter.
+  }
+
+  // Sprint 27：工具栏常驻版本号——升级测试时一眼确认当前运行的版本
+  async function fillVersionChip() {
+    if (!elements.versionChip) return;
+    try {
+      const info = await invoke('get_app_info');
+      elements.versionChip.textContent = 'v' + info.version;
+    } catch (err) {
+      console.warn('[Version] get_app_info failed:', err);
+    }
   }
 
   // ============================================

@@ -78,3 +78,7 @@ block2 = "0.6"
 # Chromium 打印管线（与 Windows WebView2 同引擎）：分页 + 边距 + 打印级输出
 # 主路径；Chrome 未安装时回退 WKWebView.createPDF
 headless_chrome = "1"
+
+# 更新检查代理探测（Sprint 27）：读 Windows 注册表系统代理
+[target.'cfg(target_os = "windows")'.dependencies]
+winreg = "0.52"
