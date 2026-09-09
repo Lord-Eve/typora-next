@@ -126,3 +126,13 @@ Feature: 更新下载进度可见性（Sprint 27）
 
   Scenario: Rust 代理解析优先级与格式归一化
     Then the proxy_config rust test should exist and pass
+
+  # PB27-7: onEvent 必填回归（2026-09-09 实爆：v0.4.3 应用内升级必败）
+  # v0.4.3 的 downloadAndInstall() 不传回调 → onEvent: undefined 被 JSON
+  # 序列化丢弃 → 插件命令缺必填 key 报 invalid args。此后必须永远携带 Channel。
+
+  Scenario: 不传回调下载也必须携带 onEvent Channel
+    Given the updater module with a mocked Tauri core
+    And the mocked latest version is "0.4.4"
+    When the download is invoked without a progress callback
+    Then the download request should carry an onEvent channel

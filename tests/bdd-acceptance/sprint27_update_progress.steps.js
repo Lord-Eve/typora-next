@@ -409,4 +409,22 @@ steps.then('main.js should fill the version chip from get_app_info at startup', 
   }
 });
 
+// PB27-7: onEvent 必填回归——不传回调时 downloadAndInstall 也要携带 Channel
+// （undefined 会被 JSON 序列化丢弃，v0.4.3 应用内升级即因此必败）
+steps.when('the download is invoked without a progress callback', async function () {
+  const update = await global.window.Updater.check();
+  // 不 await download 完成（mock 永不 resolve）——这里只验证调用参数
+  update.downloadAndInstall().catch(() => {});
+  await Promise.resolve(); // 让 mock invoke 同步段执行完
+});
+
+steps.then('the download request should carry an onEvent channel', function () {
+  if (!this.download || !this.download.channel) {
+    throw new Error('download_and_install 未携带 onEvent Channel（undefined 会被 JSON 序列化丢弃）');
+  }
+  if (typeof this.download.channel.onmessage !== 'function') {
+    throw new Error('onEvent Channel 未绑定消息回调');
+  }
+});
+
 module.exports = steps;

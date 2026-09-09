@@ -48,9 +48,16 @@
           rawJson: result.rawJson,
           rid: result.rid,
           async downloadAndInstall(onEvent) {
+            // onEvent 是插件命令的必填 key：不传回调也要给 no-op Channel——
+            // 否则 JSON 序列化丢弃 undefined，Rust 报 missing required key
+            // onEvent（v0.4.3 即因此无法应用内升级，Sprint 27 补牢）
+            const channel = createChannel(typeof onEvent === 'function' ? onEvent : () => {});
+            if (!channel) {
+              throw new Error('下载通道初始化失败：Tauri Channel 不可用');
+            }
             await invoke('plugin:updater|download_and_install', {
               rid: this.rid,
-              onEvent: onEvent ? createChannel(onEvent) : undefined
+              onEvent: channel
             });
           }
         };
