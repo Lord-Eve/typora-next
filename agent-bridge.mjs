@@ -438,7 +438,7 @@ export function collectChapterSkillRefs(projectPath) {
 // courseType is optional — emitted only when the host supplied a value.
 // hasSession switches item 1 between "already in session context" and
 // "inlined above / re-Read if incomplete" (fresh sessions never saw the skill).
-export function buildChapterPrompt({ index, chapter, projectPath, previousChapters, courseType, hasSession }) {
+export function buildChapterPrompt({ index, chapter, projectPath, previousChapters, courseType, hasSession, prevError }) {
   const courseTypeLine = courseType ? `- course_type: ${courseType}\n` : '';
   const skillNote = hasSession
     ? '1. chapter-generation skill 的 SKILL.md 和 content-format.md 已经在 init session 里读过，session context 里就有；除非内容不全再 Read 补充，否则直接用 Write 写文件。'
@@ -446,6 +446,15 @@ export function buildChapterPrompt({ index, chapter, projectPath, previousChapte
   const prevContext = index > 0
     ? `前面已生成的章节：\n${previousChapters.map((t, idx) => `${idx + 1}. ${t}`).join('\n')}`
     : '这是第一章。';
+  // 二次生成携带上次失败原因（用户裁定 2026-09-09）：agent 必须知道上次
+  // 为什么被判失败，才能针对性修正——否则重试只是原样重跑同一个错误。
+  const prevErrorBlock = prevError
+    ? `\n上次生成失败原因：${String(prevError).slice(0, 500)}\n请针对性修正后重新生成（若是文件名问题，严格使用下方硬性下发的三个文件名；若上次文件已存在但名字不符，用 Write 按正确文件名重写）。\n`
+    : '';
+  // 文件名由 bridge 单一事实源生成并硬性下发（2026-09-09 实爆：agent 自拟
+  // 文件名与 generateFilename 差词序 → existsSync 验收永远失败 → 用户无限重试）。
+  // 验收侧 generateChapters 用同一个 generateFilename 核对，两边必然一致。
+  const baseName = generateFilename(index, chapter.title).replace(/\.md$/, '');
   return `请使用 chapter-generation skill 生成第 ${index + 1} 章。
 - chapter_index: ${index}
 - chapter_title: ${JSON.stringify(chapter.title)}
@@ -455,17 +464,24 @@ ${courseTypeLine}- project_path: ${JSON.stringify(projectPath)}
 - previous_chapters: ${JSON.stringify(previousChapters)}
 
 ${prevContext}
-
+${prevErrorBlock}
 重要：
 ${skillNote}
-2. 写完三个文件后，按 SKILL.md 的 MUST-VERIFY checklist 逐项检查，不通过就改。
-3. 三个文件必须都存在且 quiz.json 顶层必须有 \`questions\` 字段（不是空对象、不是其他名字）。`;
+2. 文件名硬性要求（验收逐一核对，差一个字都判失败）——在 project_path 下写入且只能写入这三个文件名：
+   - ${baseName}.md
+   - ${baseName}.quiz.json
+   - ${baseName}.concepts.json
+   文件名由 chapter_title 逐字生成，不要自行改写标题的措辞或字序。
+3. 写完三个文件后，按 SKILL.md 的 MUST-VERIFY checklist 逐项检查，不通过就改。
+4. 三个文件必须都存在且 quiz.json 顶层必须有 \`questions\` 字段（不是空对象、不是其他名字）。`;
 }
 
 export async function generateChapters(queryFnUnused, config, args) {
   const { project_path, outline, chapter_indices, course_type } = args;
   const allChapters = outline.chapters;
   const total = allChapters.length;
+  // 上次失败原因（index → message），由前端从 chapter_failed 事件收集传入
+  const chapterErrors = args.chapter_errors || {};
 
   let indicesToGenerate;
   if (Array.isArray(chapter_indices) && chapter_indices.length > 0) {
@@ -500,7 +516,8 @@ export async function generateChapters(queryFnUnused, config, args) {
         projectPath: project_path,
         previousChapters: allChapters.slice(0, i).map((ch) => ch.title),
         courseType: course_type,
-        hasSession: Boolean(args.session_id)
+        hasSession: Boolean(args.session_id),
+        prevError: chapterErrors[String(i)] || null
       });
 
     try {

@@ -1065,6 +1065,8 @@ pub async fn generate_chapters(
     agent_process: State<'_, AgentProcess>,
     chapter_indices: Option<Vec<usize>>,
     session_id: Option<String>,
+    // 二次生成携带的上次失败原因（index → 错误信息），注入 prompt 让 agent 针对性修正
+    chapter_errors: Option<std::collections::HashMap<String, String>>,
     app_state: State<'_, AppState>,
 ) -> Result<(), String> {
     let config = get_config(app_handle.clone()).map_err(|e| e.to_string())?;
@@ -1110,6 +1112,11 @@ pub async fn generate_chapters(
         "chapter_indices": chapter_indices,
         "session_id": session_id,
     });
+    if let Some(errors) = chapter_errors {
+        if !errors.is_empty() {
+            args["chapter_errors"] = serde_json::json!(errors);
+        }
+    }
     // Pre-capture clone before `course_type` gets moved by the if-let below.
     let elem_course_type = course_type.clone().unwrap_or_default();
     if let Some(ct) = course_type {

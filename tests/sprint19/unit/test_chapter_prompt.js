@@ -95,6 +95,64 @@ function tmpdir(prefix) {
     TestRunner.assertEquals(refs, '', '无可读文件时应返回空串');
   });
 
+  // ============================================
+  // 文件名硬性下发（2026-09-09 实爆回归）
+  // agent 自拟文件名与 generateFilename 差词序（「本体介绍」→「介绍本体」）
+  // → 验收 existsSync 永远失败 → 用户无限重试。修复：prompt 逐字下发
+  // generateFilename 的结果，验收侧用同一函数核对。
+  // ============================================
+
+  await TestRunner.test('buildChapterPrompt: prompt 逐字下发 generateFilename 的三个文件名', async () => {
+    const chapter = { title: '用OWL描述「本体介绍」：类层次与属性约束', duration_minutes: 25, concepts: ['类层次'] };
+    const p = bridge.buildChapterPrompt({
+      index: 1, chapter, projectPath: '/tmp/x',
+      previousChapters: ['本体即本体'], courseType: 'technical', hasSession: true
+    });
+    const md = bridge.generateFilename(1, chapter.title);
+    const base = md.replace(/\.md$/, '');
+    TestRunner.assert(p.includes(`- ${base}.md`), 'prompt 应下发确切 md 文件名');
+    TestRunner.assert(p.includes(`- ${base}.quiz.json`), 'prompt 应下发确切 quiz 文件名');
+    TestRunner.assert(p.includes(`- ${base}.concepts.json`), 'prompt 应下发确切 concepts 文件名');
+    TestRunner.assert(p.includes('本体介绍'), '文件名应保留大纲标题原措辞（本体介绍，非介绍本体）');
+    TestRunner.assert(!p.includes('介绍本体-'), 'prompt 文件名中不应出现被改写的词序');
+  });
+
+  await TestRunner.test('buildChapterPrompt: 下发的 md 文件名与验收侧 generateFilename 全等', async () => {
+    const chapter = { title: '巴赫的生平与时代', duration_minutes: 25, concepts: ['生平'] };
+    const p = bridge.buildChapterPrompt({
+      index: 0, chapter, projectPath: '/tmp/x',
+      previousChapters: [], courseType: undefined, hasSession: true
+    });
+    const expected = bridge.generateFilename(0, chapter.title);
+    TestRunner.assert(p.includes(`- ${expected}\n`), 'prompt 中的 md 文件名必须与验收侧 generateFilename 逐字一致');
+  });
+
+  // ============================================
+  // 二次生成携带上次失败原因（用户裁定 2026-09-09）
+  // ============================================
+
+  await TestRunner.test('buildChapterPrompt: prevError 存在时注入失败原因段落', async () => {
+    const p = bridge.buildChapterPrompt({
+      index: 1, chapter: CHAPTER, projectPath: '/tmp/x',
+      previousChapters: PREV, courseType: 'technical', hasSession: true,
+      prevError: 'Agent did not write expected file: 01-巴赫的生平与时代.md'
+    });
+    TestRunner.assert(p.includes('上次生成失败原因：Agent did not write expected file'), '应注入失败原因');
+    TestRunner.assert(p.includes('针对性修正'), '应要求针对性修正');
+    TestRunner.assert(p.includes('严格使用下方硬性下发的三个文件名'), '文件名场景应指向硬性文件名');
+  });
+
+  await TestRunner.test('buildChapterPrompt: prevError 缺失/为空时不注入该段落', async () => {
+    for (const prevError of [undefined, null, '']) {
+      const p = bridge.buildChapterPrompt({
+        index: 1, chapter: CHAPTER, projectPath: '/tmp/x',
+        previousChapters: PREV, courseType: 'technical', hasSession: true,
+        prevError
+      });
+      TestRunner.assert(!p.includes('上次生成失败原因'), `prevError=${JSON.stringify(prevError)} 时不应出现失败段落`);
+    }
+  });
+
   const { failed } = await TestRunner.run();
   for (const d of _tmpDirs) {
     try { fs.rmSync(d, { recursive: true, force: true }); } catch (_) { /* ignore */ }

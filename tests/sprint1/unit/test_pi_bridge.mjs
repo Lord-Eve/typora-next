@@ -117,6 +117,75 @@ T.test('generateChapters: missing file → chapter_failed (no crash)', async () 
   fs.rmSync(proj, { recursive: true, force: true });
 });
 
+// 2026-09-09 实爆回归：agent 自拟文件名（「本体介绍」→「介绍本体」词序改写），
+// 验收门必须判失败、禁止兜底接受——文件名单一事实源是 generateFilename。
+T.test('generateChapters: agent writes self-invented filename → chapter_failed (no fallback acceptance)', async () => {
+  const proj = tmpdir('gendeviate-');
+  bridge.__setRunnerForTests(async () => {
+    // 模拟真实 agent 的不听话：写了内容，但文件名词序被改写
+    fs.writeFileSync(path.join(proj, '01-用OWL描述-介绍本体-类层次与属性约束.md'), '# ch');
+    return { output: '第 2 章已生成，三个文件均已写入', sessionFile: null, refreshed: false };
+  });
+  const events = await captureEvents(() => bridge.generateChapters(null, {}, {
+    project_path: proj,
+    outline: { chapters: [
+      { title: '本体即本体', duration_minutes: 10, concepts: [] },
+      { title: '用OWL描述「本体介绍」：类层次与属性约束', duration_minutes: 10, concepts: [] }
+    ] },
+    chapter_indices: [1]
+  }));
+  const failed = events.find(e => e.type === 'chapter_failed');
+  T.assertExists(failed, '自拟文件名必须判 chapter_failed');
+  T.assert(failed.data.error.includes('01-用OWL描述-本体介绍-类层次与属性约束.md'),
+    '报错应点名期望的确切文件名');
+  T.assert(!events.find(e => e.type === 'chapter_complete'), '不允许兜底判完成');
+  bridge.__setRunnerForTests(null);
+  fs.rmSync(proj, { recursive: true, force: true });
+});
+
+// 二次生成携带上次失败原因（用户裁定 2026-09-09）：chapter_errors 透传进 prompt
+T.test('generateChapters: chapter_errors 中的失败原因注入对应章节的 prompt', async () => {
+  const proj = tmpdir('genretry-');
+  let capturedPrompt = '';
+  bridge.__setRunnerForTests(async (opts) => {
+    capturedPrompt = opts.prompt;
+    const idx = parseInt(opts.prompt.match(/chapter_index:\s*(\d+)/)[1], 10);
+    const title = JSON.parse(opts.prompt.match(/chapter_title:\s*(".*")/m)[1]);
+    fs.writeFileSync(path.join(proj, bridge.generateFilename(idx, title)), '# ch');
+    return { output: '第 N 章已生成', sessionFile: null, refreshed: false };
+  });
+  const events = await captureEvents(() => bridge.generateChapters(null, {}, {
+    project_path: proj,
+    outline: { chapters: [{ title: '一', duration_minutes: 10, concepts: [] }, { title: '二', duration_minutes: 10, concepts: [] }] },
+    chapter_indices: [1],
+    chapter_errors: { '1': 'Agent did not write expected file: 01-二.md' }
+  }));
+  T.assertExists(events.find(e => e.type === 'chapter_complete'), 'retry should complete');
+  T.assert(capturedPrompt.includes('上次生成失败原因：Agent did not write expected file: 01-二.md'),
+    'prompt 应携带该章上次失败原因');
+  bridge.__setRunnerForTests(null);
+  fs.rmSync(proj, { recursive: true, force: true });
+});
+
+T.test('generateChapters: 无 chapter_errors 时 prompt 不含失败原因段落', async () => {
+  const proj = tmpdir('genfresh-');
+  let capturedPrompt = '';
+  bridge.__setRunnerForTests(async (opts) => {
+    capturedPrompt = opts.prompt;
+    const idx = parseInt(opts.prompt.match(/chapter_index:\s*(\d+)/)[1], 10);
+    const title = JSON.parse(opts.prompt.match(/chapter_title:\s*(".*")/m)[1]);
+    fs.writeFileSync(path.join(proj, bridge.generateFilename(idx, title)), '# ch');
+    return { output: 'ok', sessionFile: null, refreshed: false };
+  });
+  await captureEvents(() => bridge.generateChapters(null, {}, {
+    project_path: proj,
+    outline: { chapters: [{ title: '一', duration_minutes: 10, concepts: [] }] }
+  }));
+  T.assert(!capturedPrompt.includes('上次生成失败原因'), '首次生成不应出现失败原因段落');
+  bridge.__setRunnerForTests(null);
+  fs.rmSync(proj, { recursive: true, force: true });
+});
+
 // ============================================
 // explain stage
 // ============================================

@@ -149,6 +149,10 @@
             } catch (e) {
               // Invalid transition, ignore
             }
+            // 成功后清掉历史失败原因，避免下次无关重试还带旧错误
+            if (this.chapters[event.data.index]) {
+              delete this.chapters[event.data.index].lastError;
+            }
             if (event.data.file) {
               // event.data.file is just the filename from agent-bridge.
               // Prepend the project path so _openChapterFile can resolve it.
@@ -184,6 +188,11 @@
               this.setStatus(event.data.index, 'failed');
             } catch (e) {
               // Invalid transition, ignore
+            }
+            // 存住具体失败原因：① 展示给用户（inform）② 二次生成时注入 prompt
+            // （2026-09-09：文件名不匹配只显示 failed，用户不知道为何失败）
+            if (event.data.error && this.chapters[event.data.index]) {
+              this.chapters[event.data.index].lastError = String(event.data.error);
             }
           }
           break;
@@ -718,6 +727,13 @@
       } else if (payload.type === 'chapter_failed' && typeof payload.data.index === 'number') {
         this.ui.updateChapter(payload.data.index);
         if (this.overlay) this.overlay.updateChapter(payload.data.index, 'failed');
+        // 具体 inform：把 bridge 给的真实原因亮出来（用户裁定 2026-09-09：
+        // 识别到具体出错原因就要具体告知，不能只亮一个 failed 图标）
+        const reason = (payload.data.error && String(payload.data.error)) || '未知原因';
+        const chapterTitle = payload.data.title || `第 ${payload.data.index + 1} 章`;
+        const short = reason.length > 120 ? reason.slice(0, 120) + '…' : reason;
+        if (this.overlay) this.overlay.appendLog(`❌ ${chapterTitle} 生成失败：${short}`);
+        if (window.showToast) window.showToast(`❌ ${chapterTitle} 生成失败：${short}`, 'error');
       } else if (payload.type === 'error') {
         // Surface generation failures instead of leaving the overlay frozen
         // (chapters stuck in 'generating' forever). Mark any generating
@@ -1188,10 +1204,19 @@
         console.warn('[SlidingWindow] failed to read session, falling back to fresh:', e);
       }
 
+      // 二次生成携带上次失败原因（chapter_failed 时存到 chapter.lastError）：
+      // agent 需要知道上次为什么被判失败才能针对性修正，否则重试=原样重跑错误
+      const chapterErrors = {};
+      for (const i of indices) {
+        const lastError = mgr.chapters[i] && mgr.chapters[i].lastError;
+        if (lastError) chapterErrors[String(i)] = lastError;
+      }
+
       await window.__TAURI__.core.invoke('generate_chapters', {
         projectPath: projectPath || windowState.projectPath,
         outline: { chapters: mgr.chapters },
         chapterIndices: indices,
+        chapterErrors: Object.keys(chapterErrors).length > 0 ? chapterErrors : null,
         sessionId  // null is fine — Rust passes Option<String>
       });
       console.log('[SlidingWindow] generate_chapters returned', { sessionId: !!sessionId });
