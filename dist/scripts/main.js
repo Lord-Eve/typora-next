@@ -3686,6 +3686,32 @@ window.agentBridge = {
     content.className = 'lightbox-content';
 
     const clonedSvg = svg.cloneNode(true);
+
+    // Mermaid SVGs carry only a viewBox + inline max-width (no width/height
+    // attributes), so the clone collapses to the 300x150 replaced-element
+    // default inside the lightbox. Restore intrinsic size, fitted to viewport.
+    clonedSvg.style.maxWidth = 'none';
+    clonedSvg.style.maxHeight = 'none';
+    clonedSvg.removeAttribute('width');
+    clonedSvg.removeAttribute('height');
+    const vb = (clonedSvg.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(Number);
+    let natW = vb.length === 4 && vb[2] > 0 ? vb[2] : 0;
+    let natH = vb.length === 4 && vb[3] > 0 ? vb[3] : 0;
+    if (!natW || !natH) {
+      const rect = svg.getBoundingClientRect();
+      natW = rect.width;
+      natH = rect.height;
+    }
+    if (natW && natH) {
+      // SVG is vector: fit to viewport whether that means down or up.
+      const fit = Math.min(
+        (window.innerWidth * 0.9) / natW,
+        (window.innerHeight * 0.9) / natH
+      );
+      clonedSvg.style.width = Math.max(1, Math.round(natW * fit)) + 'px';
+      clonedSvg.style.height = 'auto';
+    }
+
     content.appendChild(clonedSvg);
 
     viewport.appendChild(content);

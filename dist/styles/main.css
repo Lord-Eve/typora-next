@@ -1894,7 +1894,6 @@ img:hover {
 .lightbox-content svg {
   max-width: 90vw;
   max-height: 90vh;
-  border-radius: var(--radius-lg);
   box-shadow: 0 0 40px rgba(255, 255, 255, 0.1);
   background: var(--color-bg-primary);
 }
