@@ -139,6 +139,10 @@
   text-align: center;
   color: var(--color-text-primary, #1a1a2e);
   background: var(--color-bg-primary, #fff);
+  /* 侧栏展开时内容区右移，补偿半个侧栏宽度差使内容相对整个窗口居中
+     (--sidebar-shift 由 main.js syncWelcomeCenterShift 维护) */
+  transform: translateX(var(--sidebar-shift, 0px));
+  transition: transform var(--transition-normal);
 }
 .paper-reader-welcome-icon {
   color: var(--color-accent, #3b82f6);
@@ -149,7 +153,7 @@
   margin: 0;
   font-size: 15px;
   color: var(--color-text-secondary, #4a4a68);
-  max-width: 420px;
+  max-width: 560px;
   line-height: 1.6;
 }
 .paper-reader-welcome-formats { margin-top: 4px; }
@@ -1513,6 +1517,9 @@ main {
 .welcome-message {
   text-align: center;
   padding: var(--spacing-2xl) var(--spacing-lg);
+  /* 与 .paper-reader-welcome 同因：补偿侧栏宽度，相对整个窗口居中 */
+  transform: translateX(var(--sidebar-shift, 0px));
+  transition: transform var(--transition-normal);
 }
 
 .welcome-message h1 {
@@ -3594,4 +3601,582 @@ body.paper-reader-mode[data-theme="dark"] .toolbar,
 @keyframes updateProgressSlide {
   0% { margin-left: -40%; }
   100% { margin-left: 100%; }
+}
+
+/* ============================================
+   Sprint 29: Settings Panel (grouped tabs)
+   ============================================ */
+.settings-tabs {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
+  border-bottom: 1px solid var(--color-border, rgba(128, 128, 128, 0.2));
+  padding-bottom: var(--spacing-sm);
+}
+.settings-tab {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.settings-tab:hover {
+  color: var(--color-text-primary);
+  background: var(--color-bg-secondary);
+}
+.settings-tab.active {
+  color: var(--color-accent);
+  background: var(--color-accent-light, rgba(99, 102, 241, 0.12));
+  font-weight: 600;
+}
+.settings-group-title {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin-bottom: var(--spacing-sm);
+  letter-spacing: 0.02em;
+}
+.settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--spacing-md);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--color-border, rgba(128, 128, 128, 0.2));
+}
+.settings-save-btn,
+.settings-test-btn {
+  padding: var(--spacing-sm) var(--spacing-lg);
+  border: 1px solid var(--color-border, rgba(128, 128, 128, 0.3));
+  border-radius: var(--radius-md);
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.settings-save-btn {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #fff;
+}
+.settings-save-btn:hover {
+  opacity: 0.9;
+}
+.settings-test-result {
+  margin-left: var(--spacing-sm);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+/* ============================================
+   Sprint 29: Paper Search (AnySearch)
+   ============================================ */
+.paper-search-section {
+  margin-top: var(--spacing-lg);
+  text-align: left;
+}
+.paper-search-form {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+.paper-search-input {
+  flex: 1;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--color-border, rgba(128, 128, 128, 0.3));
+  border-radius: var(--radius-md);
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+}
+.paper-search-btn {
+  padding: var(--spacing-sm) var(--spacing-lg);
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--color-accent);
+  color: #fff;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+.paper-search-btn:hover {
+  opacity: 0.9;
+}
+.paper-search-anon-hint {
+  margin-top: var(--spacing-sm);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+.paper-search-settings-btn {
+  border: none;
+  background: transparent;
+  color: var(--color-accent);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  padding: 0;
+}
+.paper-search-settings-btn:hover {
+  text-decoration: underline;
+}
+.paper-search-status,
+.paper-search-empty {
+  margin-top: var(--spacing-md);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+.paper-search-error {
+  margin-top: var(--spacing-md);
+  font-size: var(--font-size-sm);
+  color: var(--color-error, #e5534b);
+}
+.paper-search-results {
+  margin-top: var(--spacing-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+.paper-search-item {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--color-border, rgba(128, 128, 128, 0.2));
+  border-radius: var(--radius-md);
+  background: var(--color-bg-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.paper-search-title {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.paper-search-link {
+  font-size: var(--font-size-sm);
+  color: var(--color-accent);
+  word-break: break-all;
+}
+.paper-search-meta {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+.paper-search-import-btn {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 2px var(--spacing-md);
+  border: 1px solid var(--color-border, rgba(128, 128, 128, 0.3));
+  border-radius: var(--radius-md);
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+.paper-search-import-btn:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+/* ===== Sprint 29b: 欢迎页重设计——搜索为主角，导入折叠 ===== */
+.paper-search-slot {
+  width: 100%;
+  max-width: 560px;
+}
+.paper-reader-import {
+  width: 100%;
+  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.paper-reader-import-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary, #4a4a68);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--radius-md, 6px);
+  transition: color 0.2s;
+}
+.paper-reader-import-toggle:hover {
+  color: var(--color-text-primary, #1a1a2e);
+  background: var(--color-bg-tertiary, #f1f5f9);
+}
+.paper-reader-import-chevron {
+  transition: transform 0.2s;
+}
+.paper-reader-import-toggle.expanded .paper-reader-import-chevron {
+  transform: rotate(90deg);
+}
+.paper-reader-import-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+.paper-reader-import-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+}
+.paper-reader-import-row .paper-reader-welcome-btn {
+  margin-top: 0;
+  padding: 8px 14px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.paper-reader-import-row .paper-reader-url-form {
+  max-width: none;
+  flex: 1 1 260px;
+  min-width: 220px;
+}
+.paper-reader-import-panel .paper-reader-welcome-format-tag {
+  font-size: 12px;
+}
+.paper-search-open-btn {
+  margin-left: var(--spacing-sm);
+  padding: 2px var(--spacing-md);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-accent);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+.paper-search-open-btn:hover {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+/* ===== Sprint 29c: 缓存标记 + 批量缓存 ===== */
+.paper-search-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+}
+.paper-search-item-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  text-align: left;
+}
+.paper-search-cached-badge {
+  align-self: flex-start;
+  font-size: 11px;
+  color: var(--color-accent);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-full, 9999px);
+  padding: 0 8px;
+  line-height: 18px;
+}
+.paper-search-open-paper-btn {
+  padding: 2px var(--spacing-md);
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--color-accent);
+  color: #fff;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.paper-search-open-paper-btn:hover {
+  opacity: 0.9;
+}
+.paper-search-batch {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-sm);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+.paper-search-batch-btn {
+  padding: 2px var(--spacing-md);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-accent);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+.paper-search-batch-btn:hover:not(:disabled) {
+  background: var(--color-accent);
+  color: #fff;
+}
+.paper-search-batch-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ===== Sprint 30: 缓存忙态 + 所在文件夹 + 失败列表 + 论文库首页 ===== */
+.paper-search-btn-busy {
+  opacity: 0.65;
+  cursor: wait;
+  position: relative;
+}
+.paper-search-btn-busy::before {
+  content: '';
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: paper-reader-spin 0.8s linear infinite;
+  vertical-align: -1px;
+}
+.paper-search-folder-btn,
+.paper-library-folder-btn,
+.paper-library-delete-btn,
+.paper-library-delete-domain-btn {
+  padding: 2px 8px;
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: var(--radius-md);
+  background: transparent;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.paper-search-folder-btn:hover,
+.paper-library-folder-btn:hover {
+  border-color: var(--color-accent);
+}
+.paper-library-delete-btn:hover,
+.paper-library-delete-domain-btn:hover {
+  border-color: var(--color-danger, #dc2626);
+}
+.paper-search-fail-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-top: 6px;
+  font-size: var(--font-size-sm);
+}
+.paper-search-fail-text {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 论文库首页：仿课程 hub 的卡片语言 */
+.paper-library-section {
+  width: 560px;
+  max-width: 100%;
+  margin-top: var(--spacing-md);
+  text-align: left;
+}
+.paper-library-title {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin-bottom: var(--spacing-sm);
+}
+.paper-library-card {
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: var(--radius-lg, 10px);
+  margin-bottom: var(--spacing-sm);
+  overflow: hidden;
+  background: var(--color-bg-primary, #fff);
+}
+.paper-library-card-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  width: 100%;
+  padding: 10px var(--spacing-md);
+  border: none;
+  background: transparent;
+  font-size: var(--font-size-md, 14px);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  text-align: left;
+}
+.paper-library-card-header:hover {
+  background: var(--color-bg-hover, rgba(0, 0, 0, 0.04));
+}
+.paper-library-card-name {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.paper-library-card-meta {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+.paper-library-card-chevron {
+  color: var(--color-text-secondary);
+  transition: transform 0.15s ease;
+}
+.paper-library-card.expanded .paper-library-card-chevron {
+  transform: rotate(90deg);
+}
+.paper-library-list {
+  border-top: 1px solid var(--color-border, #e2e8f0);
+  padding: 6px var(--spacing-md);
+}
+.paper-library-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: 6px 0;
+}
+.paper-library-item-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-sm);
+}
+.paper-library-open-btn {
+  padding: 2px var(--spacing-md);
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--color-accent);
+  color: #fff;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.paper-library-open-btn:hover {
+  opacity: 0.9;
+}
+
+/* ===== Sprint 30b: 导入前领域选择弹窗 ===== */
+.domain-picker-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+.domain-picker {
+  width: 380px;
+  max-width: 90vw;
+  background: var(--color-bg-primary, #fff);
+  border-radius: var(--radius-lg, 10px);
+  padding: 20px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+}
+.domain-picker-title {
+  font-size: var(--font-size-lg, 16px);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.domain-picker-hint {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin-top: 4px;
+}
+.domain-picker-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.domain-picker-chip {
+  padding: 4px 12px;
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: var(--radius-full, 9999px);
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+.domain-picker-chip:hover {
+  border-color: var(--color-accent);
+}
+.domain-picker-chip.selected {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #fff;
+}
+.domain-picker-input {
+  width: 100%;
+  margin-top: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-md, 14px);
+  background: var(--color-bg-primary, #fff);
+  color: var(--color-text-primary);
+  box-sizing: border-box;
+}
+.domain-picker-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+.domain-picker-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  justify-content: flex-end;
+}
+.domain-picker-ok {
+  padding: 6px 16px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--color-accent);
+  color: #fff;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+.domain-picker-ok:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.domain-picker-skip,
+.domain-picker-cancel {
+  padding: 6px 12px;
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+.domain-picker-skip:hover,
+.domain-picker-cancel:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.setting-dir-row {
+  display: flex;
+  gap: var(--spacing-sm);
+  align-items: center;
+}
+.setting-dir-row .setting-input {
+  flex: 1;
+}
+.setting-pick-btn {
+  padding: 6px var(--spacing-md);
+  border: 1px solid var(--color-border, rgba(128, 128, 128, 0.3));
+  border-radius: var(--radius-md);
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.setting-pick-btn:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
 }

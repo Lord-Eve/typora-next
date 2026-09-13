@@ -15,6 +15,7 @@ pub mod course_completion;
 mod docx_template;
 pub mod element_compliance;
 pub mod explain_parse;
+pub mod file_assoc;
 pub mod frontmatter;
 pub mod learner_profile;
 pub mod learning_paths;
@@ -71,6 +72,13 @@ pub struct AppConfig {
     pub mineru_base_url: Option<String>,
     #[serde(default)]
     pub mineru_model_version: Option<String>,
+    // AnySearch paper search configuration (anonymous access when unset)
+    #[serde(default)]
+    pub anysearch_api_key: Option<String>,
+    // User-chosen papers library root; imported papers go to
+    // `{root}/{search-domain}/{yyyy-MM}/` (unset → project/.learning/papers → app data)
+    #[serde(default)]
+    pub papers_root: Option<String>,
     // Window state
     #[serde(default)]
     pub window_width: Option<f64>,
@@ -1187,8 +1195,14 @@ async fn share_document(
 // ============================================
 
 /// Import a local PDF file as a paper Markdown.
+///
+/// `domain` comes from the DomainPicker shown before import (Sprint 30b) —
+/// with a configured papers root the file lands in `{root}/{domain}/{yyyy-MM}/`,
+/// and the import is recorded in the index (keyed `file://<pdf path>`) so
+/// local imports show up in the paper library too.
 #[tauri::command]
 async fn import_paper_from_pdf(
+    domain: Option<String>,
     app_handle: tauri::AppHandle,
 ) -> Result<paper_import::PaperImportResult, String> {
     use tauri_plugin_dialog::DialogExt;
@@ -1218,36 +1232,526 @@ async fn import_paper_from_pdf(
 
     let project_dir = path_ref.parent().map(|p| p.display().to_string());
 
-    import_paper_inner(
+    let result = import_paper_inner(
         paper_import::mineru::SubmitTarget::LocalFile {
             name: source_name.clone(),
             bytes,
         },
         &source_name,
         project_dir.as_deref(),
+        domain.as_deref(),
         &app_handle,
     )
-    .await
+    .await?;
+
+    // 本地导入也进索引（file:// 键不会与搜索 URL 冲突），论文库可见
+    record_import_index(
+        &app_handle,
+        &format!("file://{}", path_ref.display()),
+        domain.as_deref(),
+        &result,
+    );
+
+    Ok(result)
 }
 
-/// Import a paper from a URL (arXiv or direct PDF link).
+/// Import a paper from a URL (arXiv, direct PDF, or a DOI / Semantic
+/// Scholar landing page resolvable to an open-access PDF).
+///
+/// `domain` is the search keyword that found this paper; with a configured
+/// papers root it becomes the subdirectory, so papers self-organize by field.
 #[tauri::command]
 async fn import_paper_from_url(
     url: String,
+    domain: Option<String>,
     app_handle: tauri::AppHandle,
 ) -> Result<paper_import::PaperImportResult, String> {
-    let normalized_url =
-        paper_import::arxiv::normalize_paper_url(&url).map_err(|e| format!("URL 不支持: {}", e))?;
+    // arXiv / 直链 PDF 直接归一化；落地页（DOI、S2）经 Semantic Scholar
+    // 解析出开放获取 PDF；解析不到才报"不支持"
+    let normalized_url = match paper_import::arxiv::normalize_paper_url(&url) {
+        Ok(u) => u,
+        Err(e) => match paper_import::resolve::resolve_url_to_pdf(&url) {
+            Ok(Some(pdf)) => pdf,
+            Ok(None) => {
+                return Err(format!(
+                    "URL 不支持: {}；未找到开放获取 PDF，请先下载 PDF 后再导入",
+                    e
+                ))
+            }
+            Err(err) => return Err(format!("解析论文链接失败: {}", err)),
+        },
+    };
 
     let source_name = paper_import::arxiv::source_name_from_url(&normalized_url);
 
-    import_paper_inner(
+    let result = import_paper_inner(
         paper_import::mineru::SubmitTarget::Url(normalized_url),
         &source_name,
         None,
+        domain.as_deref(),
         &app_handle,
     )
-    .await
+    .await?;
+
+    // 记录到导入索引（幂等，失败仅告警不影响导入结果）
+    record_import_index(&app_handle, &url, domain.as_deref(), &result);
+
+    Ok(result)
+}
+
+/// Append `result` to the paper import index, keyed by the original URL.
+fn record_import_index(
+    app_handle: &tauri::AppHandle,
+    original_url: &str,
+    domain: Option<&str>,
+    result: &paper_import::PaperImportResult,
+) {
+    let index_path = match paper_import::import_index_file(app_handle) {
+        Ok(path) => path,
+        Err(e) => {
+            log::warn!("[paper_import] index path unavailable: {}", e);
+            return;
+        }
+    };
+    let mut index = paper_import::index::load_index(&index_path);
+    paper_import::index::record(
+        &mut index,
+        paper_import::index::ImportIndexEntry {
+            url: original_url.to_string(),
+            md_path: result.md_path.clone(),
+            title: result.title.clone(),
+            cached_at: chrono::Local::now().to_rfc3339(),
+            domain: domain.map(|s| s.to_string()),
+        },
+    );
+    if let Err(e) = paper_import::index::save_index(&index_path, &index) {
+        log::warn!("[paper_import] index save failed: {}", e);
+    }
+}
+
+/// Pick a directory for imported papers (settings 论文服务).
+/// Returns None when the user cancels the dialog.
+#[tauri::command]
+async fn pick_papers_dir(app_handle: tauri::AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let (tx, rx) = std::sync::mpsc::channel();
+    app_handle
+        .dialog()
+        .file()
+        .pick_folder(move |picked| {
+            let _ = tx.send(picked.map(|p| p.to_string()));
+        });
+    // 对话框是回调式 API；命令内同步等待用户选择（一次性交互，可接受）
+    rx.recv().map_err(|e| format!("选择目录失败: {}", e))
+}
+
+/// List all papers cached via URL import (for "已缓存" marks on search results).
+#[tauri::command]
+async fn list_imported_papers(
+    app_handle: tauri::AppHandle,
+) -> Result<Vec<paper_import::index::ImportIndexEntry>, String> {
+    let index_path = paper_import::import_index_file(&app_handle)?;
+    let index = paper_import::index::load_index(&index_path);
+    Ok(index.into_values().collect())
+}
+
+/// The effective papers library root (no domain subdir) — settings panel
+/// shows this so the default location is never a mystery.
+#[tauri::command]
+async fn get_papers_dir(app_handle: tauri::AppHandle) -> Result<String, String> {
+    let dir = paper_import::resolve_papers_dir(&app_handle, None, None)?;
+    Ok(dir.to_string_lossy().to_string())
+}
+
+/// Open a directory itself in the system file manager (vs `show_in_folder`
+/// which selects a file inside its parent). Creates the directory first so
+/// a not-yet-used papers root still opens.
+#[tauri::command]
+fn open_folder(path: String) -> Result<(), String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("目录路径为空".to_string());
+    }
+    std::fs::create_dir_all(trimmed).map_err(|e| format!("创建目录失败: {}", e))?;
+    let os = std::env::consts::OS;
+    let result = match os {
+        "windows" => std::process::Command::new("explorer").arg(trimmed).spawn(),
+        "macos" => std::process::Command::new("open").arg(trimmed).spawn(),
+        _ => std::process::Command::new("xdg-open").arg(trimmed).spawn(),
+    };
+    result
+        .map(|_| ())
+        .map_err(|e| format!("无法打开文件夹: {}", e))
+}
+
+/// Remove `dir` and its parent when they became empty after a file delete.
+/// `remove_dir` only succeeds on empty dirs, so this never eats non-empty
+/// folders (e.g. the appdata `papers/` dir holding import_index.json).
+fn cleanup_empty_dirs_after_delete(md_path: &str) {
+    let mut dir = std::path::Path::new(md_path).parent();
+    // yyyy-MM 目录，再往上是领域目录（或 appdata/papers——非空则自动放弃）
+    for _ in 0..2 {
+        let Some(d) = dir else { break };
+        if std::fs::remove_dir(d).is_err() {
+            break;
+        }
+        dir = d.parent();
+    }
+}
+
+/// Delete one cached paper file; NotFound is tolerated (index cleanup still
+/// proceeds). Returns true when the file was actually removed.
+fn delete_paper_file(md_path: &str) -> Result<bool, String> {
+    match std::fs::remove_file(md_path) {
+        Ok(()) => {
+            cleanup_empty_dirs_after_delete(md_path);
+            Ok(true)
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(e) => Err(format!("删除文件失败 {}: {}", md_path, e)),
+    }
+}
+
+/// Delete a cached paper FOR REAL: remove the .md from disk and the index
+/// entry (Sprint 30c — 课程的删除是软删不删文件，论文必须是真删除).
+#[tauri::command]
+async fn delete_paper(url: String, app_handle: tauri::AppHandle) -> Result<(), String> {
+    let index_path = paper_import::import_index_file(&app_handle)?;
+    let mut index = paper_import::index::load_index(&index_path);
+    let Some(entry) = paper_import::index::find_by_url(&index, &url).cloned() else {
+        return Err(format!("论文不在索引中: {}", url));
+    };
+    delete_paper_file(&entry.md_path)?;
+    paper_import::index::remove(&mut index, &url);
+    paper_import::index::save_index(&index_path, &index)?;
+    Ok(())
+}
+
+/// Delete a whole domain (论文集): every paper file + index entries.
+/// Empty `domain` targets the 未分类 group (entries with blank domain).
+/// Returns how many papers were removed from the index.
+#[tauri::command]
+async fn delete_paper_domain(
+    domain: String,
+    app_handle: tauri::AppHandle,
+) -> Result<usize, String> {
+    let index_path = paper_import::import_index_file(&app_handle)?;
+    let mut index = paper_import::index::load_index(&index_path);
+    let want = domain.trim();
+    let urls: Vec<String> = index
+        .values()
+        .filter(|e| {
+            let d = e.domain.as_deref().unwrap_or("").trim();
+            if want.is_empty() {
+                d.is_empty()
+            } else {
+                d == want
+            }
+        })
+        .map(|e| e.url.clone())
+        .collect();
+    if urls.is_empty() {
+        return Ok(0);
+    }
+    let mut entries = Vec::new();
+    for url in &urls {
+        if let Some(e) = paper_import::index::find_by_url(&index, url) {
+            entries.push(e.clone());
+        }
+    }
+    for e in &entries {
+        delete_paper_file(&e.md_path)?;
+    }
+    for url in &urls {
+        paper_import::index::remove(&mut index, url);
+    }
+    paper_import::index::save_index(&index_path, &index)?;
+    Ok(urls.len())
+}
+
+// ============================================
+// Sprint 31: 导入失败批量 agent 补救
+// ============================================
+
+/// One failed import, sent by the frontend with the FULL error text
+/// (the error is the agent's context — never truncated).
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct RescueFailure {
+    pub url: String,
+    #[serde(default)]
+    pub title: Option<String>,
+    pub error: String,
+}
+
+/// Per-paper outcome after the rescue pass.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct RescueOutcome {
+    pub url: String,
+    pub ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub md_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// Batch agent rescue for failed paper imports (Sprint 31).
+///
+/// ALL failures go to the agent in ONE call — the agent judges and plans
+/// (systemic 429 → switch source for all; individual no-OA → search by
+/// title), writes `{attempts: [{url, candidates, notes}]}` to a scratch
+/// file, then Rust retries each paper with the sanitized candidates.
+///
+/// No AI config → Err("未配置 AI…") so the frontend falls back to the old
+/// error path. Agent failure → every failure comes back with its original
+/// error plus the rescue attempt record (never a bare exception).
+#[tauri::command]
+async fn rescue_paper_imports(
+    failures: Vec<RescueFailure>,
+    domain: Option<String>,
+    app_handle: tauri::AppHandle,
+) -> Result<Vec<RescueOutcome>, String> {
+    if failures.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let config = get_config(app_handle.clone())?;
+    let api_key = config.api_key.clone().unwrap_or_default();
+    if api_key.trim().is_empty() {
+        return Err("未配置 AI，无法智能补救".to_string());
+    }
+
+    // Scratch workspace: papers dir / .rescue（skill + scratch 都放这里，
+    // 与论文库目录并列，不污染任何领域子目录）
+    let papers_dir = paper_import::resolve_papers_dir(&app_handle, None, None)?;
+    let work_dir = papers_dir.join(".rescue");
+    std::fs::create_dir_all(&work_dir).map_err(|e| format!("创建补救工作目录失败: {}", e))?;
+    crate::ai_agent::copy_bundled_skills_to_project(&work_dir.to_string_lossy())?;
+
+    let output_file = work_dir
+        .join(".learning")
+        .join(".paper-rescue-result.json");
+    // 清掉上一轮遗留的 scratch，避免读到过期结果
+    let _ = std::fs::remove_file(&output_file);
+
+    let failures_json: Vec<serde_json::Value> = failures
+        .iter()
+        .map(|f| {
+            serde_json::json!({
+                "url": f.url,
+                "title": f.title,
+                "error": f.error,
+            })
+        })
+        .collect();
+
+    let payload = serde_json::json!({
+        "config": {
+            "ai_provider": config.ai_provider.as_ref().map(|p| format!("{:?}", p).to_lowercase()).unwrap_or_else(|| "anthropic".to_string()),
+            "ai_base_url": config.ai_base_url,
+            "api_key": config.api_key,
+            "model": config.model,
+        },
+        "args": {
+            "failures": failures_json,
+            "work_dir": work_dir.to_string_lossy().to_string(),
+            "output_file": output_file.to_string_lossy().to_string(),
+            "anysearch_api_key": config.anysearch_api_key,
+        }
+    });
+
+    let bridge_path = crate::ai_agent::get_agent_bridge_path()?;
+    let mut cmd = std::process::Command::new("node");
+    cmd.arg(&bridge_path)
+        .arg("paper-rescue")
+        .arg(payload.to_string())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped());
+    crate::ai_agent::apply_agent_sdk_entry(&mut cmd, &bridge_path);
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    log::info!(
+        "[paper_rescue] spawning agent rescue for {} failures",
+        failures.len()
+    );
+    let rescue_error: Option<String> = match cmd.spawn() {
+        Ok(mut child) => {
+            let status = child.wait().map_err(|e| format!("等待 agent 补救失败: {}", e))?;
+            let stderr = child
+                .stderr
+                .take()
+                .map(|mut s| {
+                    use std::io::Read;
+                    let mut buf = String::new();
+                    let _ = s.read_to_string(&mut buf);
+                    buf
+                })
+                .unwrap_or_default();
+            if !output_file.exists() {
+                let msg = if status.success() {
+                    "agent 未写出补救结果文件".to_string()
+                } else {
+                    format!(
+                        "agent 补救进程失败 (exit {:?}): {}",
+                        status.code().unwrap_or(-1),
+                        stderr.trim()
+                    )
+                };
+                log::warn!("[paper_rescue] {}", msg);
+                Some(msg)
+            } else {
+                None
+            }
+        }
+        Err(e) => {
+            log::warn!("[paper_rescue] spawn failed: {}", e);
+            Some(format!("启动 agent 补救失败: {}", e))
+        }
+    };
+
+    let attempts = match rescue_error {
+        Some(e) => {
+            // agent 本身失败：每篇透出 原始错误 + 补救尝试记录
+            return Ok(failures
+                .iter()
+                .map(|f| RescueOutcome {
+                    url: f.url.clone(),
+                    ok: false,
+                    md_path: None,
+                    title: None,
+                    error: Some(paper_import::rescue::combine_failure_error(
+                        &f.error, &e, &[], "",
+                    )),
+                })
+                .collect());
+        }
+        None => {
+            let content = std::fs::read_to_string(&output_file).unwrap_or_default();
+            let _ = std::fs::remove_file(&output_file);
+            match paper_import::rescue::parse_rescue_result(&content) {
+                Ok(a) => a,
+                Err(e) => {
+                    return Ok(failures
+                        .iter()
+                        .map(|f| RescueOutcome {
+                            url: f.url.clone(),
+                            ok: false,
+                            md_path: None,
+                            title: None,
+                            error: Some(paper_import::rescue::combine_failure_error(
+                                &f.error, &e, &[], "",
+                            )),
+                        })
+                        .collect());
+                }
+            }
+        }
+    };
+
+    // 逐篇按 agent 给的候选重试（MinerU 管线不变，只在 Rust 侧）
+    let mut outcomes = Vec::new();
+    for failure in &failures {
+        let attempt = attempts.iter().find(|a| a.url == failure.url);
+        let candidates: Vec<String> = attempt
+            .map(|a| {
+                a.candidates
+                    .iter()
+                    .filter_map(|c| paper_import::rescue::sanitize_candidate(c))
+                    .take(3)
+                    .collect()
+            })
+            .unwrap_or_default();
+        let notes = attempt.map(|a| a.notes.clone()).unwrap_or_default();
+
+        let mut last_error = String::new();
+        let mut rescued: Option<paper_import::PaperImportResult> = None;
+        for candidate in &candidates {
+            log::info!(
+                "[paper_rescue] retrying {} via candidate {}",
+                failure.url,
+                candidate
+            );
+            let source_name = paper_import::arxiv::source_name_from_url(candidate);
+            match import_paper_inner(
+                paper_import::mineru::SubmitTarget::Url(candidate.clone()),
+                &source_name,
+                None,
+                domain.as_deref(),
+                &app_handle,
+            )
+            .await
+            {
+                Ok(result) => {
+                    rescued = Some(result);
+                    break;
+                }
+                Err(e) => {
+                    last_error = e;
+                }
+            }
+        }
+
+        match rescued {
+            Some(result) => {
+                // 键仍是原始 URL——补救成功后搜索页/论文库看到的还是原来那篇
+                record_import_index(&app_handle, &failure.url, domain.as_deref(), &result);
+                outcomes.push(RescueOutcome {
+                    url: failure.url.clone(),
+                    ok: true,
+                    md_path: Some(result.md_path),
+                    title: result.title,
+                    error: None,
+                });
+            }
+            None => outcomes.push(RescueOutcome {
+                url: failure.url.clone(),
+                ok: false,
+                md_path: None,
+                title: None,
+                error: Some(paper_import::rescue::combine_failure_error(
+                    &failure.error,
+                    &notes,
+                    &candidates,
+                    &last_error,
+                )),
+            }),
+        }
+    }
+
+    Ok(outcomes)
+}
+
+/// Open a URL in the system default browser (for "open original page"
+/// fallback when a paper has no resolvable open-access PDF).
+#[tauri::command]
+fn open_external(url: String) -> Result<(), String> {
+    let trimmed = url.trim();
+    if !(trimmed.starts_with("https://") || trimmed.starts_with("http://")) {
+        return Err(format!("拒绝打开非 HTTP 链接: {}", trimmed));
+    }
+    #[cfg(target_os = "windows")]
+    let status = std::process::Command::new("cmd")
+        .args(["/c", "start", "", trimmed])
+        .status();
+    #[cfg(target_os = "macos")]
+    let status = std::process::Command::new("open").arg(trimmed).status();
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let status = std::process::Command::new("xdg-open").arg(trimmed).status();
+    let ok = status
+        .map_err(|e| format!("打开浏览器失败: {}", e))?
+        .success();
+    if ok {
+        Ok(())
+    } else {
+        Err("打开浏览器失败".to_string())
+    }
 }
 
 /// Query the status of an in-flight import task.
@@ -1258,6 +1762,21 @@ async fn import_paper_from_url(
 async fn get_paper_import_status(task_id: String) -> Result<paper_import::ImportStatus, String> {
     log::info!("[paper_import] get_paper_import_status: {}", task_id);
     Ok(paper_import::ImportStatus::unknown())
+}
+
+/// Search papers by keyword via AnySearch (academic domain).
+///
+/// Uses the configured `anysearch_api_key` when present; falls back to
+/// anonymous access (lower rate limits) when unset.
+#[tauri::command]
+async fn search_papers(
+    app_handle: tauri::AppHandle,
+    query: String,
+) -> Result<paper_import::search::PaperSearchResponse, String> {
+    log::info!("[paper_search] query: {}", query);
+    let config = get_config(app_handle)?;
+    let api_key = config.anysearch_api_key.as_deref();
+    paper_import::search::search_papers(api_key, &query)
 }
 
 /// Recursively copy the contents of `src` into `dst`, preserving the
@@ -1291,6 +1810,7 @@ async fn import_paper_inner(
     target: paper_import::mineru::SubmitTarget,
     source_name: &str,
     project_dir: Option<&str>,
+    domain: Option<&str>,
     app_handle: &tauri::AppHandle,
 ) -> Result<paper_import::PaperImportResult, String> {
     let config = get_config(app_handle.clone())?;
@@ -1346,10 +1866,11 @@ async fn import_paper_inner(
         let md_content = std::fs::read_to_string(&md_path_in_zip)
             .map_err(|e| format!("读取解析后的 Markdown 失败: {}", e))?;
 
-        let papers_dir = paper_import::resolve_papers_dir(app_handle, project_dir)?;
+        let papers_dir = paper_import::resolve_papers_dir(app_handle, project_dir, domain)?;
+        let title_hint = paper_import::storage::extract_title_hint(&md_content);
         let saved_path = paper_import::storage::save_paper_md(
             &papers_dir,
-            None, // TODO: extract title from PDF metadata or first heading
+            title_hint.as_deref(),
             source_name,
             &md_content,
         )
@@ -4519,6 +5040,16 @@ pub fn run() {
                 window.open_devtools();
             }
 
+            // Sprint 28: NSIS 更新静默删除文件关联注册表（见 file_assoc
+            // 模块的文档注释）。自愈只在 release 构建启用，避免 debug 时
+            // 双击打开的 .md 关联被重写到 target/debug 下的临时 exe。
+            #[cfg(not(debug_assertions))]
+            match file_assoc::ensure_file_associations() {
+                Ok(0) => {}
+                Ok(n) => log::info!("file-assoc self-heal: repaired {n} entries"),
+                Err(e) => log::warn!("file-assoc self-heal failed: {e}"),
+            }
+
             // Check command line arguments for .md file path (file association)
             let args: Vec<String> = std::env::args().collect();
             if args.len() > 1 {
@@ -4626,6 +5157,15 @@ pub fn run() {
             import_paper_from_pdf,
             import_paper_from_url,
             get_paper_import_status,
+            search_papers,
+            list_imported_papers,
+            pick_papers_dir,
+            get_papers_dir,
+            open_folder,
+            delete_paper,
+            delete_paper_domain,
+            rescue_paper_imports,
+            open_external,
             mac_pdf::export_pdf,
             create_project_subdir,
             get_demo_file,

@@ -360,6 +360,10 @@ window.agentBridge = {
       return;
     }
 
+    // Sprint 30b：本地 PDF 没有搜索上下文，导入前先选领域（取消则中止）
+    const domain = window.DomainPicker ? await window.DomainPicker.pick() : null;
+    if (domain === undefined) return;
+
     if (!AppWorkspace.isIn('paper')) {
       const switched = await AppWorkspace.switchTo('paper');
       if (!switched) return;
@@ -369,7 +373,7 @@ window.agentBridge = {
     window.PaperImport.showProgress(container, 'submit', '正在导入 PDF，请稍候...');
 
     try {
-      const result = await invoke('import_paper_from_pdf');
+      const result = await invoke('import_paper_from_pdf', { domain });
       window.PaperImport.hideProgress(container);
       if (!result || !result.md_path) {
         showError('导入失败：未返回文件路径');
@@ -411,6 +415,10 @@ window.agentBridge = {
       return;
     }
 
+    // Sprint 30b：粘贴 URL 没有搜索上下文，导入前先选领域（取消则中止）
+    const domain = window.DomainPicker ? await window.DomainPicker.pick() : null;
+    if (domain === undefined) return;
+
     if (!AppWorkspace.isIn('paper')) {
       const switched = await AppWorkspace.switchTo('paper');
       if (!switched) return;
@@ -419,7 +427,7 @@ window.agentBridge = {
     window.PaperImport.showProgress(container, 'submit', '正在从 URL 导入论文，请稍候...');
 
     try {
-      const result = await invoke('import_paper_from_url', { url });
+      const result = await invoke('import_paper_from_url', { url, domain });
       window.PaperImport.hideProgress(container);
       if (!result || !result.md_path) {
         showError('导入失败：未返回文件路径');
@@ -1557,9 +1565,27 @@ window.agentBridge = {
     }
   }
 
+  // 侧栏展开时内容区相对整个窗口右移，欢迎页需要补偿半个侧栏宽度差
+  // 才能在视觉上居中于窗口（折叠态为 0）。
+  // 注意不能量 getBoundingClientRect：侧栏 width 有 250ms 过渡，切换瞬间
+  // 量到的是旧值；直接从 --sidebar-width 变量读展开宽度（含媒体查询场景）。
+  // 另加 20px 光学补偿：侧栏是实心色块，视觉重量偏左，数值居中反而观感左倾。
+  function syncWelcomeCenterShift() {
+    let expanded = 260;
+    try {
+      expanded = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-width')) || 260;
+    } catch (e) {
+      // mock DOM 等环境无 getComputedStyle，用默认值
+    }
+    const w = state.sidebarCollapsed ? 40 : expanded;
+    const opticalBias = state.sidebarCollapsed ? 0 : 20;
+    document.documentElement.style.setProperty('--sidebar-shift', `${-(w - 40) / 2 + opticalBias}px`);
+  }
+
   function toggleSidebar() {
     state.sidebarCollapsed = !state.sidebarCollapsed;
     elements.sidebar.classList.toggle('collapsed', state.sidebarCollapsed);
+    syncWelcomeCenterShift();
     saveUIState();
   }
 
@@ -4601,8 +4627,16 @@ window.agentBridge = {
     }
 
     // Check if template toggle is on; if so, ask user to pick a .docx template.
+    // Sprint 29: 配置迁入主 config；localStorage 旧值兜底兼容
     let templatePath = null;
-    if (localStorage.getItem('wordExportUseTemplate') === 'true') {
+    let useTemplatePref = false;
+    try {
+      const cfg = await invoke('get_config');
+      useTemplatePref = !!(cfg && cfg.word_export_use_template);
+    } catch (e) {
+      useTemplatePref = localStorage.getItem('wordExportUseTemplate') === 'true';
+    }
+    if (useTemplatePref) {
       const useTemplate = await _showConfirm('已启用 Word 模板样式。\n\n导出前是否先选择模板文件？\n\n• 选择模板：使用模板中的字体/字号/行距/编号样式\n• 取消：本次仍用默认样式导出');
       if (useTemplate) {
         try {
@@ -5248,23 +5282,6 @@ window.agentBridge = {
     if (elements.settingsModalClose) {
       elements.settingsModalClose.addEventListener('click', closeSettings);
     }
-    if (elements.settingsCancel) {
-      elements.settingsCancel.addEventListener('click', closeSettings);
-    }
-    if (elements.settingsSave) {
-      elements.settingsSave.addEventListener('click', saveSettings);
-    }
-    if (elements.settingsTest) {
-      elements.settingsTest.addEventListener('click', testLLMConfig);
-    }
-    if (elements.restartOnboardingBtn) {
-      elements.restartOnboardingBtn.addEventListener('click', () => {
-        if (onboardingManager) {
-          onboardingManager.restart();
-          closeSettings();
-        }
-      });
-    }
     if (elements.settingsModal) {
       elements.settingsModal.addEventListener('click', (e) => {
         if (e.target === elements.settingsModal) closeSettings();
@@ -5272,9 +5289,7 @@ window.agentBridge = {
     }
 
     // About modal
-    if (elements.settingsAboutBtn) {
-      elements.settingsAboutBtn.addEventListener('click', openAboutModal);
-    }
+    // Sprint 29: settingsAboutBtn 移入 settings-panel 通用分组，由模块自行绑定
     if (elements.aboutModalClose) {
       elements.aboutModalClose.addEventListener('click', closeAboutModal);
     }
@@ -5340,33 +5355,12 @@ window.agentBridge = {
     try {
       const config = await invoke('get_config');
       if (config) {
-        if (config.api_key && elements.settingApiKey) {
-          elements.settingApiKey.value = config.api_key;
-        }
-        if (config.ai_provider && elements.settingAiProvider) {
-          elements.settingAiProvider.value = config.ai_provider;
-        }
-        if (config.ai_base_url !== undefined && elements.settingAiBaseUrl) {
-          elements.settingAiBaseUrl.value = config.ai_base_url || '';
-        }
-        if (config.model !== undefined && elements.settingModel) {
-          elements.settingModel.value = config.model || '';
-        }
-        if (config.mineru_api_token !== undefined && elements.settingMineruToken) {
-          elements.settingMineruToken.value = config.mineru_api_token || '';
-        }
-        if (config.mineru_base_url !== undefined && elements.settingMineruBaseUrl) {
-          elements.settingMineruBaseUrl.value = config.mineru_base_url || '';
-        }
-        if (config.mineru_model_version !== undefined && elements.settingMineruModel) {
-          elements.settingMineruModel.value = config.mineru_model_version || 'vlm';
-        }
-        if (config.theme && elements.settingTheme) {
-          elements.settingTheme.value = config.theme;
+        // Sprint 29: 设置表单由 SettingsPanel 模块渲染；此处只负责启动时
+        //应用主题/光标，元素填充在 openSettings 中委托给模块
+        if (config.theme) {
           applyTheme(config.theme);
         }
-        if (elements.settingCustomCursor) {
-          elements.settingCustomCursor.value = config.custom_cursor || '';
+        if (config.custom_cursor !== undefined) {
           applyCustomCursor(config.custom_cursor);
         }
       }
@@ -5386,6 +5380,7 @@ window.agentBridge = {
         state.sidebarCollapsed = config.sidebar_collapsed;
         elements.sidebar.classList.toggle('collapsed', state.sidebarCollapsed);
       }
+      syncWelcomeCenterShift();
 
       // Restore sidebar active tab
       if (config.sidebar_active_tab) {
@@ -5417,13 +5412,19 @@ window.agentBridge = {
     }
   }
 
-  function openSettings() {
+  async function openSettings() {
     if (elements.settingsModal) {
       elements.settingsModal.style.display = 'flex';
     }
-    // Load word template toggle from localStorage
-    if (elements.settingWordTemplate) {
-      elements.settingWordTemplate.checked = localStorage.getItem('wordExportUseTemplate') === 'true';
+    const body = elements.settingsModal ? elements.settingsModal.querySelector('.modal-body') : null;
+    if (body && window.SettingsPanel) {
+      window.SettingsPanel.mount(body);
+      try {
+        const config = await invoke('get_config');
+        await window.SettingsPanel.load(config || {});
+      } catch (err) {
+        console.error('Failed to load config:', err);
+      }
     }
   }
 
@@ -5638,90 +5639,8 @@ window.agentBridge = {
     }
   }
 
-  async function testLLMConfig() {
-    const apiKey = elements.settingApiKey ? elements.settingApiKey.value.trim() : '';
-    const aiProvider = elements.settingAiProvider ? elements.settingAiProvider.value : 'anthropic';
-    const aiBaseUrl = elements.settingAiBaseUrl ? elements.settingAiBaseUrl.value.trim() : '';
-    const model = elements.settingModel ? elements.settingModel.value.trim() : '';
-
-    if (!apiKey) {
-      if (elements.testResult) {
-        elements.testResult.textContent = '请先填写 API Key';
-        elements.testResult.style.color = 'var(--color-error)';
-      }
-      return;
-    }
-
-    if (elements.testResult) {
-      elements.testResult.textContent = '测试中...';
-      elements.testResult.style.color = 'var(--color-text-secondary)';
-    }
-
-    const config = {
-      api_key: apiKey,
-      ai_provider: aiProvider,
-      ai_base_url: aiBaseUrl || null,
-      model: model || null
-    };
-
-    try {
-      await invoke('test_llm_config', { config });
-      if (elements.testResult) {
-        elements.testResult.textContent = '连接成功';
-        elements.testResult.style.color = 'var(--color-success)';
-      }
-      showToast('连接测试成功');
-    } catch (err) {
-      console.error('LLM config test failed:', err);
-      if (elements.testResult) {
-        elements.testResult.textContent = '连接失败: ' + err;
-        elements.testResult.style.color = 'var(--color-error)';
-      }
-    }
-  }
-
-  async function saveSettings() {
-    const apiKey = elements.settingApiKey ? elements.settingApiKey.value.trim() : '';
-    const aiProvider = elements.settingAiProvider ? elements.settingAiProvider.value : 'anthropic';
-    const aiBaseUrl = elements.settingAiBaseUrl ? elements.settingAiBaseUrl.value.trim() : '';
-    const model = elements.settingModel ? elements.settingModel.value.trim() : '';
-    const mineruToken = elements.settingMineruToken ? elements.settingMineruToken.value.trim() : '';
-    const mineruBaseUrl = elements.settingMineruBaseUrl ? elements.settingMineruBaseUrl.value.trim() : '';
-    const mineruModel = elements.settingMineruModel ? elements.settingMineruModel.value : 'vlm';
-    const theme = elements.settingTheme ? elements.settingTheme.value : '';
-    const customCursor = elements.settingCustomCursor ? elements.settingCustomCursor.value : '';
-
-    const config = {
-      api_key: apiKey || null,
-      ai_provider: aiProvider,
-      ai_base_url: aiBaseUrl || null,
-      model: model || null,
-      mineru_api_token: mineruToken || null,
-      mineru_base_url: mineruBaseUrl || null,
-      mineru_model_version: mineruModel || null,
-      theme: theme || null,
-      custom_cursor: customCursor || null
-    };
-
-    // Save word template toggle to localStorage
-    if (elements.settingWordTemplate) {
-      localStorage.setItem('wordExportUseTemplate', elements.settingWordTemplate.checked ? 'true' : 'false');
-    }
-
-    try {
-      await invoke('set_config', { config });
-      if (theme) {
-        applyTheme(theme);
-      }
-      applyCustomCursor(customCursor);
-      showToast('设置已保存');
-      closeSettings();
-    } catch (err) {
-      console.error('Failed to save config:', err);
-      showError('保存失败: ' + err);
-    }
-  }
-
+  
+  
   // ============================================
   // Sprint 8a: Open Socratic review (bypass threshold, for testing + manual entry)
   // ============================================
@@ -6708,6 +6627,23 @@ window.agentBridge = {
     _showConfirm,
     enhanceReaderContent,
     initToolbarTooltips,
+    // Sprint 29: settings-panel / paper-search 模块回调
+    openSettings,
+    onSettingsSaved(config) {
+      if (config.theme) {
+        applyTheme(config.theme);
+      }
+      applyCustomCursor(config.custom_cursor || '');
+      showToast('设置已保存');
+      closeSettings();
+    },
+    restartOnboarding() {
+      if (onboardingManager) {
+        onboardingManager.restart();
+      }
+      closeSettings();
+    },
+    openAbout: openAboutModal,
 
     /**
      * Refresh the file tree sidebar from the currently opened folder.

@@ -27,33 +27,55 @@
           <p class="paper-reader-welcome-desc">
             AI 会帮你标出论文重点，按推荐顺序阅读，并用"人话"解释难点。
           </p>
-          <div class="paper-reader-welcome-formats">
-            <span class="paper-reader-welcome-format-tag">当前支持：本地 Markdown (.md)、PDF、论文 URL</span>
-          </div>
-          <button class="paper-reader-welcome-btn" id="paper-reader-select-file">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:6px;">
-              <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/>
-              <polyline points="13 2 13 9 20 9"/>
-            </svg>
-            选择本地论文文件
-          </button>
-          <div class="paper-reader-welcome-divider"><span>或</span></div>
-          <button class="paper-reader-welcome-btn paper-reader-welcome-btn-secondary" id="paper-reader-select-pdf">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:6px;">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-              <polyline points="14 2 14 8 20 8"/>
-              <line x1="16" y1="13" x2="8" y2="13"/>
-              <line x1="16" y1="17" x2="8" y2="17"/>
-              <polyline points="10 9 9 9 8 9"/>
-            </svg>
-            导入本地 PDF
-          </button>
-          <div class="paper-reader-url-form">
-            <input type="text" id="paper-reader-url-input" class="paper-reader-url-input" placeholder="粘贴论文 URL（支持 arXiv）" />
-            <button class="paper-reader-welcome-btn" id="paper-reader-import-url">导入</button>
+          <div class="paper-search-slot"></div>
+          <div class="paper-library-slot"></div>
+          <div class="paper-reader-import">
+            <button class="paper-reader-import-toggle" id="paper-reader-import-toggle" aria-expanded="false">
+              <svg class="paper-reader-import-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+              导入已有论文
+            </button>
+            <div class="paper-reader-import-panel" style="display:none">
+              <div class="paper-reader-import-row">
+                <button class="paper-reader-welcome-btn paper-reader-welcome-btn-secondary" id="paper-reader-select-file">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:6px;">
+                    <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/>
+                    <polyline points="13 2 13 9 20 9"/>
+                  </svg>
+                  Markdown
+                </button>
+                <button class="paper-reader-welcome-btn paper-reader-welcome-btn-secondary" id="paper-reader-select-pdf">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:6px;">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                    <polyline points="10 9 9 9 8 9"/>
+                  </svg>
+                  本地 PDF
+                </button>
+                <div class="paper-reader-url-form">
+                  <input type="text" id="paper-reader-url-input" class="paper-reader-url-input" placeholder="粘贴论文 URL（支持 arXiv）" />
+                  <button class="paper-reader-welcome-btn" id="paper-reader-import-url">导入</button>
+                </div>
+              </div>
+              <span class="paper-reader-welcome-format-tag">当前支持：本地 Markdown (.md)、PDF、论文 URL</span>
+            </div>
           </div>
         </div>
       `;
+
+      const toggle = container.querySelector('#paper-reader-import-toggle');
+      const panel = container.querySelector('.paper-reader-import-panel');
+      if (toggle && panel) {
+        toggle.addEventListener('click', () => {
+          const expanded = panel.style.display !== 'none';
+          panel.style.display = expanded ? 'none' : '';
+          toggle.setAttribute('aria-expanded', String(!expanded));
+          toggle.classList.toggle('expanded', !expanded);
+        });
+      }
 
       const btn = container.querySelector('#paper-reader-select-file');
       if (btn && window.TyporaNext && window.TyporaNext.openPaperFile) {
@@ -79,6 +101,26 @@
         urlInput.addEventListener('keydown', (e) => {
           if (e.key === 'Enter') triggerUrlImport();
         });
+      }
+
+      // Sprint 29: 按领域搜索论文（AnySearch），搜索框是欢迎页主角，
+      // 渲染在标题下方的专用槽位里
+      if (window.PaperSearch) {
+        const slot = container.querySelector('.paper-search-slot') || container;
+        window.PaperSearch.attach(slot).catch((err) => {
+          console.warn('[paper-search] attach failed:', err);
+        });
+      }
+
+      // Sprint 30: 论文库——按领域分组的已缓存论文（课程选择的交互语言），
+      // 取代 Sprint 29c 的"恢复上次搜索结果"
+      if (window.PaperLibrary) {
+        const libSlot = container.querySelector('.paper-library-slot');
+        if (libSlot) {
+          window.PaperLibrary.attach(libSlot).catch((err) => {
+            console.warn('[paper-library] attach failed:', err);
+          });
+        }
       }
     },
 
