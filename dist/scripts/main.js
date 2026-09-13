@@ -5174,7 +5174,7 @@ window.agentBridge = {
   }
 
   function applyCustomCursor(cursorType) {
-    document.body.classList.remove('cursor-pencil', 'cursor-highlighter', 'cursor-pen', 'cursor-cat', 'cursor-microphone', 'cursor-rocket', 'cursor-wand');
+    document.body.classList.remove('cursor-pencil', 'cursor-highlighter', 'cursor-pen', 'cursor-cat', 'cursor-microphone', 'cursor-rocket', 'cursor-falcon9', 'cursor-wand', 'cursor-leaf', 'cursor-star', 'cursor-coffee', 'cursor-bulb');
     if (cursorType) {
       document.body.classList.add('cursor-' + cursorType);
     }

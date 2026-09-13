@@ -236,7 +236,9 @@
 
       const cursors = [
         ['', '系统默认'], ['pencil', '铅笔'], ['highlighter', '荧光笔'], ['pen', '圆珠笔'],
-        ['cat', '猫咪'], ['microphone', '麦克风'], ['rocket', '火箭'], ['wand', '魔法棒']
+        ['cat', '猫咪'], ['microphone', '麦克风'], ['rocket', '火箭'], ['falcon9', '猎鹰九号'],
+        ['wand', '魔法棒'], ['leaf', '叶子'], ['star', '星星'], ['coffee', '咖啡杯'],
+        ['bulb', '灯泡']
       ];
       const cursor = el('select', 'setting-select');
       cursor.id = 'settingCustomCursor';

@@ -212,6 +212,82 @@ steps.then('保存的配置包含 papers_root 为{string}', async (dir) => {
   }
 });
 
+// ============================================================
+// 光标套件（11 种自定义光标的全链路接线）
+// ============================================================
+
+/** 从设置面板下拉框读出全部自定义光标值（排除系统默认空值） */
+function readCursorValues() {
+  const select = root.querySelector('#settingCustomCursor');
+  if (!select) throw new Error('未找到光标下拉框');
+  return select.querySelectorAll('option')
+    .map(o => o.getAttribute('value'))
+    .filter(v => v);
+}
+
+steps.then('光标下拉框包含{int}种自定义光标', async (n) => {
+  const values = readCursorValues();
+  if (values.length !== n) {
+    throw new Error(`光标选项 ${values.length} 种，期望 ${n} 种：${values.join(', ')}`);
+  }
+});
+
+steps.then('光标下拉框第一项为系统默认', async () => {
+  const select = root.querySelector('#settingCustomCursor');
+  const first = select.querySelectorAll('option')[0];
+  // 断言文案而非 value：mock-dom 的 getAttribute 用 `|| null`，空字符串会返回 null
+  // （真实 DOM 返回 ''），此处以用户可见的「默认项排在最前」为准。
+  if (!first || first.textContent !== '系统默认') {
+    throw new Error(`第一项不是系统默认（实际: ${first && first.textContent}）`);
+  }
+});
+
+steps.when('用户选择光标样式为{string}', async (value) => {
+  const select = root.querySelector('#settingCustomCursor');
+  if (!select) throw new Error('未找到光标下拉框');
+  select.value = value;
+});
+
+steps.then('保存的配置包含 custom_cursor 为{string}', async (value) => {
+  if (!__savedConfig) throw new Error('set_config 未被调用');
+  if (__savedConfig.custom_cursor !== value) {
+    throw new Error(`custom_cursor=${__savedConfig.custom_cursor}，期望 ${value}`);
+  }
+});
+
+steps.then('每个光标选项都有对应的 SVG 文件', async () => {
+  const fs = require('fs');
+  for (const v of readCursorValues()) {
+    const p = path.join(__dirname, `../../dist/cursors/${v}.svg`);
+    if (!fs.existsSync(p)) throw new Error(`光标 ${v} 缺少 SVG 文件: dist/cursors/${v}.svg`);
+  }
+});
+
+steps.then('每个光标选项都有对应的 CSS 规则', async () => {
+  const fs = require('fs');
+  const css = fs.readFileSync(path.join(__dirname, '../../dist/styles/main.css'), 'utf8');
+  for (const v of readCursorValues()) {
+    if (!css.includes(`.cursor-${v},`)) {
+      throw new Error(`光标 ${v} 缺少 CSS 规则: body.cursor-${v}`);
+    }
+    if (!css.includes(`cursors/${v}.svg`)) {
+      throw new Error(`光标 ${v} 的 CSS 规则未引用 SVG: cursors/${v}.svg`);
+    }
+  }
+});
+
+steps.then('每个光标选项都有对应的 class 清理声明', async () => {
+  const fs = require('fs');
+  const mainJs = fs.readFileSync(path.join(__dirname, '../../dist/scripts/main.js'), 'utf8');
+  const m = mainJs.match(/function applyCustomCursor[\s\S]{0,600}?\n  \}/);
+  if (!m) throw new Error('未找到 applyCustomCursor 函数');
+  for (const v of readCursorValues()) {
+    if (!m[0].includes(`'cursor-${v}'`)) {
+      throw new Error(`applyCustomCursor 未清理 'cursor-${v}'——切换光标时旧样式会残留`);
+    }
+  }
+});
+
 steps.then('缓存的论文按领域分子目录存放', async () => {
   // 后端 choose_papers_dir 的领域子目录行为由 paper_title_test.rs 覆盖，
   // 这里验证前端把领域关键词传给导入命令（根目录语义的一环）

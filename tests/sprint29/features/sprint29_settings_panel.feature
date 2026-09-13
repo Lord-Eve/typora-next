@@ -50,3 +50,17 @@ Feature: 设置面板分组与配置可靠性
     And 点击保存设置
     Then 保存的配置包含 papers_root 为“D:\papers”
     And 缓存的论文按领域分子目录存放
+
+  Scenario: 光标样式提供完整选项集
+    Then 光标下拉框包含 12 种自定义光标
+    And 光标下拉框第一项为系统默认
+
+  Scenario: 新光标可选中并保存
+    When 用户选择光标样式为“coffee”
+    And 点击保存设置
+    Then 保存的配置包含 custom_cursor 为“coffee”
+
+  Scenario: 每种光标选项都接线完整
+    Then 每个光标选项都有对应的 SVG 文件
+    And 每个光标选项都有对应的 CSS 规则
+    And 每个光标选项都有对应的 class 清理声明
