@@ -97,7 +97,7 @@ class StepRegistry {
     // 注意：pattern 中如需字面 `+` `*` `?` 等 regex 元字符，请用 \{string\} 等占位符，
     // 或在 step text 中改用其他字面（如 "和"、"与"），避免与 regex 量词冲突。
     let regexStr = pattern
-      .replace(/\{string\}/g, '["""""]([^""""]+)["""""]')
+      .replace(/\{string\}/g, '["“”"]([^"“”"]+)["“”"]')
       .replace(/\{int\}/g, '\\s*(\\d+)\\s*')
       .replace(/\{word\}/g, '(\\S+)');
     regexStr = '^' + regexStr + '$';
