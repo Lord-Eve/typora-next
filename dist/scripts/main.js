@@ -259,7 +259,7 @@ window.agentBridge = {
     }
   }
 
-  // Sprint 10 PB1: Open paper reader workspace
+  // Open paper reader workspace
   async function openPaperReader() {
     if (!window.__TAURI__) {
       showError('论文导读需要在桌面应用中使用');
@@ -360,7 +360,7 @@ window.agentBridge = {
       return;
     }
 
-    // Sprint 30b：本地 PDF 没有搜索上下文，导入前先选领域（取消则中止）
+    // 本地 PDF 没有搜索上下文，导入前先选领域（取消则中止）
     const domain = window.DomainPicker ? await window.DomainPicker.pick() : null;
     if (domain === undefined) return;
 
@@ -415,7 +415,7 @@ window.agentBridge = {
       return;
     }
 
-    // Sprint 30b：粘贴 URL 没有搜索上下文，导入前先选领域（取消则中止）
+    // 粘贴 URL 没有搜索上下文，导入前先选领域（取消则中止）
     const domain = window.DomainPicker ? await window.DomainPicker.pick() : null;
     if (domain === undefined) return;
 
@@ -557,7 +557,7 @@ window.agentBridge = {
       invoke('open_file', { path: filePath }).then(result => {
         if (result && result.content) {
           addTab(result.path, result.content, result.base_dir || '');
-          // Sprint 7: ask Rust to flash taskbar / bounce Dock if the user
+          // ask Rust to flash taskbar / bounce Dock if the user
           // is not currently looking at the app window. No-op when focused.
           // Fire-and-forget: don't pollute the main flow on failure.
           invoke('notify_external_file_opened').catch(err =>
@@ -1242,13 +1242,13 @@ window.agentBridge = {
       initObsidianEmbeds(baseDir);
       initDownloadButtons();
 
-      // Sprint 3: Enhance learning elements (concept/question/quiz cards)
-      console.log('[Sprint3-MAIN] checking LearningModeIntegration:', typeof window.LearningModeIntegration, 'course-mode:', AppWorkspace.isIn('course'));
+      // Enhance learning elements (concept/question/quiz cards)
+      console.log('[MAIN] checking LearningModeIntegration:', typeof window.LearningModeIntegration, 'course-mode:', AppWorkspace.isIn('course'));
       if (window.LearningModeIntegration) {
         try {
           window.LearningModeIntegration.enhanceLearningElements();
         } catch (e) {
-          console.warn('[Sprint3] enhanceLearningElements failed:', e);
+          console.warn('enhanceLearningElements failed:', e);
         }
       }
 
@@ -1256,7 +1256,7 @@ window.agentBridge = {
       await applyAnnotations();
       console.log('[DEBUG renderMarkdown] applyAnnotations done');
 
-      // Sprint 3: Setup quiz panel + selection explainer (only in learning mode)
+      // Setup quiz panel + selection explainer (only in learning mode)
       if (AppWorkspace.isIn('course') && window.LearningModeIntegration) {
         try {
           // Get current chapter file path and project base dir
@@ -1266,7 +1266,7 @@ window.agentBridge = {
           window.LearningModeIntegration.setupQuizPanel(chapterFile, projectPath);
           window.LearningModeIntegration.setupSelectionExplainer();
         } catch (e) {
-          console.warn('[Sprint3] mode integration setup failed:', e);
+          console.warn('mode integration setup failed:', e);
         }
       }
 
@@ -2625,7 +2625,7 @@ window.agentBridge = {
   }
 
   /**
-   * Sprint 5: 修复成功后展示双按钮 — 应用到源文件 / 仅本次会话
+   * 修复成功后展示双按钮 — 应用到源文件 / 仅本次会话
    * 修复 [[feedback_brainstorm_ux_gap]]：补上状态机的退出路径 + 持久化机制
    */
   function renderMermaidFixSuccess(wrapper, brokenCode, fixedCode) {
@@ -4627,7 +4627,7 @@ window.agentBridge = {
     }
 
     // Check if template toggle is on; if so, ask user to pick a .docx template.
-    // Sprint 29: 配置迁入主 config；localStorage 旧值兜底兼容
+    // 配置迁入主 config；localStorage 旧值兜底兼容
     let templatePath = null;
     let useTemplatePref = false;
     try {
@@ -5251,7 +5251,7 @@ window.agentBridge = {
     if (elements.translateBtn) {
       elements.translateBtn.addEventListener('click', toggleTranslation);
     }
-    // Sprint 8a: Socratic dev quick-trigger (gated by localStorage flag, see isDevQuickTriggerEnabled)
+    // Socratic dev quick-trigger (gated by localStorage flag, see isDevQuickTriggerEnabled)
     const socraticQuickBtn = document.getElementById('openSocraticBtn');
     if (socraticQuickBtn) {
       socraticQuickBtn.addEventListener('click', () => {
@@ -5289,7 +5289,7 @@ window.agentBridge = {
     }
 
     // About modal
-    // Sprint 29: settingsAboutBtn 移入 settings-panel 通用分组，由模块自行绑定
+    // settingsAboutBtn 移入 settings-panel 通用分组，由模块自行绑定
     if (elements.aboutModalClose) {
       elements.aboutModalClose.addEventListener('click', closeAboutModal);
     }
@@ -5355,7 +5355,7 @@ window.agentBridge = {
     try {
       const config = await invoke('get_config');
       if (config) {
-        // Sprint 29: 设置表单由 SettingsPanel 模块渲染；此处只负责启动时
+        // 设置表单由 SettingsPanel 模块渲染；此处只负责启动时
         //应用主题/光标，元素填充在 openSettings 中委托给模块
         if (config.theme) {
           applyTheme(config.theme);
@@ -5480,13 +5480,13 @@ window.agentBridge = {
           statusEl.className = 'about-update-status update-available';
         }
         // Ask user if they want to update now
-        // Sprint 27：手动检查（About 面板）也弹横幅——否则「请更新」没有安装入口
+        // 手动检查（About 面板）也弹横幅——否则「请更新」没有安装入口
         askUpdateConfirmation(result);
       } else {
         showUpdateBadge(false);
         if (statusEl) {
           if (result.error) {
-            // Sprint 27：仅真正未配置时提示未配置；网络等失败透出真实错误
+            // 仅真正未配置时提示未配置；网络等失败透出真实错误
             statusEl.textContent = result.notConfigured
               ? '更新服务未配置，请设置 GitHub Release'
               : '检查更新失败：' + result.error;
@@ -5561,7 +5561,7 @@ window.agentBridge = {
 
     // Wire up buttons
     document.getElementById('updateNotifInstall').addEventListener('click', () => {
-      // 不移除横幅——performUpdate 会把它原地变形为进度卡片（Sprint 27）
+      // 不移除横幅——performUpdate 会把它原地变形为进度卡片
       if (window.__updateConfirmResolve) window.__updateConfirmResolve(true);
     });
     document.getElementById('updateNotifSkip').addEventListener('click', () => {
@@ -5576,7 +5576,7 @@ window.agentBridge = {
     });
   }
 
-  // Sprint 27：把更新横幅原地变形为进度卡片（常驻可见，不依赖 About 面板）
+  // 把更新横幅原地变形为进度卡片（常驻可见，不依赖 About 面板）
   function renderUpdateProgress(banner, state) {
     let host = banner;
     if (!host) {
@@ -5642,7 +5642,7 @@ window.agentBridge = {
   
   
   // ============================================
-  // Sprint 8a: Open Socratic review (bypass threshold, for testing + manual entry)
+  // Open Socratic review (bypass threshold, for testing + manual entry)
   // ============================================
   async function openSocraticReview() {
     if (!window.SocraticModal) {
@@ -5707,7 +5707,7 @@ window.agentBridge = {
     // Word export is now available on all platforms via Rust native converter.
   }
 
-  // Sprint 27：工具栏常驻版本号——升级测试时一眼确认当前运行的版本
+  // 工具栏常驻版本号——升级测试时一眼确认当前运行的版本
   async function fillVersionChip() {
     if (!elements.versionChip) return;
     try {
@@ -6137,7 +6137,7 @@ window.agentBridge = {
       }
     });
 
-    // Sprint 17: 划词原地触发案例研习（与苏格拉底共用笔记本面板，不进窄侧栏）
+    // 划词原地触发案例研习（与苏格拉底共用笔记本面板，不进窄侧栏）
     selectionToolbar.querySelector('#caseStudySelectionBtn').addEventListener('click', () => {
       const selection = window.getSelection();
       if (!selection || selection.isCollapsed) return;
@@ -6275,7 +6275,7 @@ window.agentBridge = {
     if (aiBtn) {
       aiBtn.style.display = AppWorkspace.isIn('course') ? 'inline-flex' : 'none';
     }
-    // Sprint 17: 案例研习按钮与解释按钮同显隐（仅课程模式）
+    // 案例研习按钮与解释按钮同显隐（仅课程模式）
     const caseBtn = selectionToolbar.querySelector('#caseStudySelectionBtn');
     if (caseBtn) {
       caseBtn.style.display = AppWorkspace.isIn('course') ? 'inline-flex' : 'none';
@@ -6627,7 +6627,7 @@ window.agentBridge = {
     _showConfirm,
     enhanceReaderContent,
     initToolbarTooltips,
-    // Sprint 29: settings-panel / paper-search 模块回调
+    // settings-panel / paper-search 模块回调
     openSettings,
     onSettingsSaved(config) {
       if (config.theme) {

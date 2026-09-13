@@ -1,7 +1,6 @@
 /**
  * Socratic Review — State Management
- * Sprint 8
- *
+ * *
  * Persists trigger state in {project}/.learning/socratic-state.json
  * PHYSICALLY ISOLATED from project.json and quiz-history.json
  */

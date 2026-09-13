@@ -103,7 +103,7 @@
         });
       }
 
-      // Sprint 29: 按领域搜索论文（AnySearch），搜索框是欢迎页主角，
+      // 按领域搜索论文（AnySearch），搜索框是欢迎页主角，
       // 渲染在标题下方的专用槽位里
       if (window.PaperSearch) {
         const slot = container.querySelector('.paper-search-slot') || container;
@@ -112,8 +112,8 @@
         });
       }
 
-      // Sprint 30: 论文库——按领域分组的已缓存论文（课程选择的交互语言），
-      // 取代 Sprint 29c 的"恢复上次搜索结果"
+      // 论文库——按领域分组的已缓存论文（课程选择的交互语言），
+      // 取代 的"恢复上次搜索结果"
       if (window.PaperLibrary) {
         const libSlot = container.querySelector('.paper-library-slot');
         if (libSlot) {

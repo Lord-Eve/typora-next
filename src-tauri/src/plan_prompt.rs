@@ -12,13 +12,13 @@ use serde_json::Value;
 /// Pure function — extracted for testability.
 /// Mirrors the prompt that previously lived in agent-bridge.mjs planCourse().
 ///
-/// `learner_context` (Sprint 21): aggregated cross-course memory block from
+/// `learner_context`: aggregated cross-course memory block from
 /// `learner_profile::aggregate_learner_context`. `None` (or empty) produces a
-/// prompt byte-identical to the pre-Sprint-21 form — users with no completed
+/// prompt byte-identical to the legacy form — users with no completed
 /// courses see zero behavior change.
-/// `persona_section` (Sprint 23): rendered learner-persona block from
+/// `persona_section`: rendered learner-persona block from
 /// `persona_prompt::render_persona_block` (domains + analogy material + the
-/// analogy directive). `None`/empty → prompt identical to pre-Sprint-23.
+/// analogy directive). `None`/empty → prompt identical to legacy.
 pub fn build_plan_prompt(
     goal: &str,
     level: &str,

@@ -2542,7 +2542,7 @@ body.pdf-exporting-mac .markdown-body {
   transform: none;
 }
 
-/* Sprint 5: 双按钮 — 应用到源文件 / 仅本次会话 */
+/* 双按钮 — 应用到源文件 / 仅本次会话 */
 .mermaid-fix-actions {
   display: flex;
   gap: 8px;
@@ -3535,7 +3535,7 @@ body.paper-reader-mode[data-theme="dark"] .toolbar,
   line-height: var(--line-height-normal);
 }
 
-/* Toolbar version chip (Sprint 27) */
+/* Toolbar version chip */
 .version-chip {
   align-self: center;
   font-size: var(--font-size-xs);
@@ -3580,7 +3580,7 @@ body.paper-reader-mode[data-theme="dark"] .toolbar,
   color: var(--color-text-primary);
 }
 
-/* Update progress bar (banner morphs into progress card, Sprint 27) */
+/* Update progress bar (banner morphs into progress card) */
 .update-progress-track {
   height: 6px;
   border-radius: 3px;
@@ -3604,7 +3604,7 @@ body.paper-reader-mode[data-theme="dark"] .toolbar,
 }
 
 /* ============================================
-   Sprint 29: Settings Panel (grouped tabs)
+   Settings Panel (grouped tabs)
    ============================================ */
 .settings-tabs {
   display: flex;
@@ -3672,7 +3672,7 @@ body.paper-reader-mode[data-theme="dark"] .toolbar,
 }
 
 /* ============================================
-   Sprint 29: Paper Search (AnySearch)
+   Paper Search (AnySearch)
    ============================================ */
 .paper-search-section {
   margin-top: var(--spacing-lg);
@@ -3778,7 +3778,7 @@ body.paper-reader-mode[data-theme="dark"] .toolbar,
   color: var(--color-accent);
 }
 
-/* ===== Sprint 29b: 欢迎页重设计——搜索为主角，导入折叠 ===== */
+/* ===== 欢迎页重设计——搜索为主角，导入折叠 ===== */
 .paper-search-slot {
   width: 100%;
   max-width: 560px;
@@ -3858,7 +3858,7 @@ body.paper-reader-mode[data-theme="dark"] .toolbar,
   color: #fff;
 }
 
-/* ===== Sprint 29c: 缓存标记 + 批量缓存 ===== */
+/* ===== 缓存标记 + 批量缓存 ===== */
 .paper-search-item {
   display: flex;
   align-items: flex-start;
@@ -3920,7 +3920,7 @@ body.paper-reader-mode[data-theme="dark"] .toolbar,
   cursor: default;
 }
 
-/* ===== Sprint 30: 缓存忙态 + 所在文件夹 + 失败列表 + 论文库首页 ===== */
+/* ===== 缓存忙态 + 所在文件夹 + 失败列表 + 论文库首页 ===== */
 .paper-search-btn-busy {
   opacity: 0.65;
   cursor: wait;
@@ -4057,7 +4057,7 @@ body.paper-reader-mode[data-theme="dark"] .toolbar,
   opacity: 0.9;
 }
 
-/* ===== Sprint 30b: 导入前领域选择弹窗 ===== */
+/* ===== 导入前领域选择弹窗 ===== */
 .domain-picker-overlay {
   position: fixed;
   inset: 0;

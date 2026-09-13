@@ -1,4 +1,4 @@
-//! Cross-course learner memory (Sprint 21).
+//! Cross-course learner memory.
 //!
 //! On course completion a compact profile is written into the course's own
 //! `.learning/completion-profile.json` (travels with the course directory),
@@ -184,7 +184,7 @@ pub fn aggregate_learner_context(index_path: &Path) -> Option<String> {
     aggregate_impl(index_path, None)
 }
 
-/// Sprint 21 v2: aggregate only the courses the user picked in the memory
+/// aggregate only the courses the user picked in the memory
 /// panel. The selection filter runs after stale-prune but before the
 /// MAX_COURSES cap, so picking 7 courses injects the newest 5 *of the
 /// selection*. Empty selection = inject nothing (None, no disk reads);
@@ -364,7 +364,7 @@ pub fn list_valid_course_names(index_path: &Path) -> Vec<String> {
 /// Concept names shown per entry (panel + rank prompt stay compact).
 const MAX_CONCEPTS_SHOWN: usize = 12;
 
-/// Full entries for the memory selection panel (Sprint 21 v2), newest first,
+/// Full entries for the memory selection panel, newest first,
 /// same prune/cap rules as aggregation. Each entry:
 /// `{course_path, course_name, completed_at, course_type?, mastered_count,
 /// weak_count, concepts: [≤12 names]}`. Corrupt profiles rebuild from
@@ -446,7 +446,7 @@ pub fn list_course_entries(index_path: &Path) -> Vec<Value> {
 }
 
 // ============================================
-// Sprint 23: 学习者画像（learner-persona.json，派生缓存）
+// 学习者画像（learner-persona.json，派生缓存）
 // 唯一真相源仍是各课 completion-profile；此文件可随时删除重建，
 // 本模块对画像只做读/写，绝不在读路径写盘。
 // ============================================

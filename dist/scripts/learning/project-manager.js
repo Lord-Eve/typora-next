@@ -110,7 +110,7 @@
     const toolbarBtn = document.getElementById('newLearningProjectBtn');
     if (toolbarBtn) {
       toolbarBtn.addEventListener('click', async () => {
-        // Sprint 10: paper reader mode switch guard
+        // paper reader mode switch guard
         if (window.isPaperReaderActive && window.isPaperReaderActive()) {
           const ok = await window.confirmPaperReaderSwitch('切换模式将关闭论文，是否继续？');
           if (!ok) return;
@@ -157,7 +157,7 @@
         dialogState.error = null;
         showError(null);
       }
-      // Sprint 21 v2: 目标变化 → 防抖刷新记忆面板的相关性推荐
+      // 目标变化 → 防抖刷新记忆面板的相关性推荐
       scheduleMemoryRecommendation();
     });
 
@@ -293,7 +293,7 @@
     loadLearnerPersona();
   }
 
-  // Sprint 22: roadmap 卡片点击 → 预填创建对话框（不自动提交，用户确认后再生成）
+  // roadmap 卡片点击 → 预填创建对话框（不自动提交，用户确认后再生成）
   function openDialogWithPrefill(prefill) {
     openDialog();
     if (!prefill) return;
@@ -314,7 +314,7 @@
   }
 
   // ============================================
-  // Sprint 21 v2: 跨课程记忆面板（课程级勾选 + agent 相关性推荐）
+  // 跨课程记忆面板（课程级勾选 + agent 相关性推荐）
   // ============================================
   // 打开对话框时 list_learner_courses_detail 拉取课程级条目渲染为右栏列表；
   // 勾选集合随大纲规划请求透传（选中即注入，全不选即不注入）。目标输入防抖
@@ -393,7 +393,7 @@
   }
 
   // ============================================
-  // Sprint 23: 学习者画像（领域组合 + 类比素材）— 面板摘要行
+  // 学习者画像（领域组合 + 类比素材）— 面板摘要行
   // ============================================
   // 画像文件是后端派生缓存：打开对话框时 get_learner_persona 按源课程指纹
   // 决定复用/重建（LLM 聚类，失败自动规则降级），前端只呈现与透传开关。
@@ -743,7 +743,7 @@
           // 记忆面板勾选集合：数组 = 只注入这些课程（[]=不注入）；
           // 无历史课程时省略，Rust 走旧全量行为（结果等价于无记忆）
           memoryCourses: memoryState.courses.length ? Array.from(memoryState.selected) : undefined,
-          // Sprint 23：画像段落开关（仅影响本次；面板缺席时保持默认启用）
+          // 画像段落开关（仅影响本次；面板缺席时保持默认启用）
           personaEnabled: personaState.enabled
         });
         console.log('[LearningProject] plan_course_llm returned:', outline);

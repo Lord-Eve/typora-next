@@ -1,5 +1,5 @@
 /**
- * External Refresh — 切回标签时的外部修改检测决策（Sprint 14）
+ * External Refresh — 切回标签时的外部修改检测决策
  *
  * 背景：watcher 是单文件、随焦点切换的（main.js watchCurrentFile）。
  * 后台标签的文件被外部修改时既无监听也无提示，切回后渲染的仍是

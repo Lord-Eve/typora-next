@@ -95,14 +95,14 @@
               <path d="M2 12l10 5 10-5"/>
             </svg>
           </button>
-          <!-- Sprint 10: 论文导读 -->
+          <!-- 论文导读 -->
           <button class="btn-icon" id="paperReaderBtn" data-tooltip="论文导读">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
               <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
             </svg>
           </button>
-          <!-- Sprint 8a: 立即 Socratic 复习（绕过阈值，方便验收） -->
+          <!-- 立即 Socratic 复习（绕过阈值，方便验收） -->
           <!-- Hidden by default; shown only in learning mode when triggered or dev flag on -->
           <button class="btn-icon" id="openSocraticBtn" data-tooltip="Socratic 复习（需 dev flag）" style="display:none;">
             <span style="font-size:18px;">🏛️</span>
@@ -238,7 +238,7 @@
           <pre class="source-code" id="sourceCode"></pre>
         </div>
 
-        <!-- Cornell Sidebar (learning mode only, Sprint 6 PB2) -->
+        <!-- Cornell Sidebar (learning mode only) -->
         <aside class="cornell-sidebar" id="cornellSidebar" style="display: none;"></aside>
       </div>
     </main>
@@ -251,7 +251,7 @@
         <h2>设置</h2>
         <button class="modal-close" id="settingsModalClose">&times;</button>
       </div>
-      <!-- Sprint 29: 表单由 settings-panel.js 动态渲染为分组 tab（AI / 论文服务 / 外观 / 通用） -->
+      <!-- 表单由 settings-panel.js 动态渲染为分组 tab（AI / 论文服务 / 外观 / 通用） -->
       <div class="modal-body" id="settingsBody"></div>
     </div>
   </div>
@@ -326,7 +326,7 @@
         <button class="modal-close" id="learningModalClose">×</button>
       </div>
       <div class="modal-body" id="learningModalBody">
-        <!-- Step 1: Input Form（Sprint 21 v2: 左表单 + 右学习历史选择面板） -->
+        <!-- Step 1: Input Form（左表单 + 右学习历史选择面板） -->
         <div id="learningStepInput" class="learning-step">
           <div class="learning-input-cols">
             <div class="learning-input-main">
@@ -483,23 +483,23 @@
   <script src="scripts/markdown-utils.js"></script>
   <script src="scripts/learning/exploration-ui.js"></script>
   <script src="scripts/learning/mode-integration.js"></script>
-  <!-- Sprint 8: Socratic Review (8a MVP) -->
+  <!-- Socratic Review (8a MVP) -->
   <script src="scripts/learning/socratic-state.js"></script>
   <script src="scripts/learning/socratic-trigger.js"></script>
-  <!-- Sprint 17: 笔记本对话外壳（socratic-modal 依赖） -->
+  <!-- 笔记本对话外壳（socratic-modal 依赖） -->
   <script src="scripts/learning/notebook-modal.js"></script>
   <script src="scripts/learning/socratic-modal.js"></script>
-  <!-- Sprint 17: 案例研习 -->
+  <!-- 案例研习 -->
   <script src="scripts/learning/case-study-modal.js"></script>
-  <!-- Sprint 10: Paper Reader -->
+  <!-- Paper Reader -->
   <script src="scripts/learning/paper-reader.js"></script>
   <script src="scripts/learning/paper-reader-integration.js"></script>
   <script src="scripts/learning/paper-import.js"></script>
-  <!-- Sprint 29: 论文搜索（AnySearch）+ 设置面板分组模块 -->
+  <!-- 论文搜索（AnySearch）+ 设置面板分组模块 -->
   <script src="scripts/learning/paper-search.js"></script>
-  <!-- Sprint 30: 论文库首页（按领域分组的已缓存论文） -->
+  <!-- 论文库首页（按领域分组的已缓存论文） -->
   <script src="scripts/learning/paper-library.js"></script>
-  <!-- Sprint 30b: 导入前领域选择 -->
+  <!-- 导入前领域选择 -->
   <script src="scripts/learning/domain-picker.js"></script>
   <script src="scripts/settings-panel.js"></script>
   <script src="scripts/onboarding.js"></script>

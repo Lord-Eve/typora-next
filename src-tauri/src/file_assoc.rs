@@ -1,4 +1,4 @@
-//! 文件关联自愈（Sprint 28）
+//! 文件关联自愈
 //!
 //! 根因：Tauri NSIS 更新流程先静默运行旧版 uninstall.exe，卸载器会删除
 //! `HKCU\Software\Classes` 下的 ProgID（Markdown Document）与打开命令，

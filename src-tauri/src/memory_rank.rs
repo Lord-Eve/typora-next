@@ -1,4 +1,4 @@
-//! Agent-driven relevance ranking for cross-course memory (Sprint 21 v2).
+//! Agent-driven relevance ranking for cross-course memory.
 //!
 //! When the user types a learning goal in the create dialog, the frontend
 //! asks Rust to rank the indexed completed courses by relevance so the

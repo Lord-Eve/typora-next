@@ -2,7 +2,7 @@
  * Element Renderer
  * Renders learning elements (!concept / !question / !quiz) as interactive cards
  *
- * Sprint 3 task 3.1
+ * task 3.1
  *
  * State machine (quiz):
  *   unanswered → answering → submitted

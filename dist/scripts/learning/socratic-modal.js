@@ -1,15 +1,14 @@
 /**
  * Socratic Review — V2 Notebook Modal
- * Sprint 8
- *
+ * *
  * Visual: docs/prototypes/sprint8-socratic-mockups.html (V2)
  * - Top: cluster concept chips (no progress)
  * - Middle: vertical notebook cards (Q + A)
  * - Bottom: input + send
  * - No fixed "X/Y" progress (AI decides question order/count dynamically)
- * - 2nd confirm on end (avoid accidental close, Sprint 2 lesson)
+ * - 2nd confirm on end (avoid accidental close, lesson)
  *
- * Sprint 17: UI 外壳抽至 notebook-modal.js（本类 = 引擎：cluster 加载 /
+ * UI 外壳抽至 notebook-modal.js（本类 = 引擎：cluster 加载 /
  * tutor 对话 / 会话落盘），公共 API 与 DOM id 不变。
  */
 
@@ -46,7 +45,7 @@
     };
   }
 
-  // Sprint 17: UI 外壳依赖（浏览器由 index.html 先加载 notebook-modal.js；
+  // UI 外壳依赖（浏览器由 index.html 先加载 notebook-modal.js；
   // Node 测试只 require 本文件，需兜底引入）
   if (!window.NotebookModal && typeof require !== 'undefined') {
     try {
@@ -98,7 +97,7 @@
         this.cluster = { concepts: [], edges: [], cluster_hash: 'empty' };
       }
 
-      // Render UI（Sprint 17: 外壳在 notebook-modal.js，id 与拆分前一致）
+      // Render UI（外壳在 notebook-modal.js，id 与拆分前一致）
       this._renderDOM();
       this._bindEvents();
 
@@ -106,7 +105,7 @@
       await this._sendTutorTurn();
     }
 
-    /** Build the V2 Notebook modal DOM（Sprint 17: 委托 NotebookModal 外壳） */
+    /** Build the V2 Notebook modal DOM（委托 NotebookModal 外壳） */
     _renderDOM() {
       const chipsHtml = this.concept_titles.length > 0
         ? this.concept_titles.map((t, i) =>

@@ -1,5 +1,5 @@
 // -*- coding: utf-8 -*-
-//! 更新检查代理探测（Sprint 27）
+//! 更新检查代理探测
 //!
 //! 背景：tauri-plugin-updater 的 reqwest 未启用 system-proxy feature，
 //! GUI 进程又继承不到终端的 HTTPS_PROXY，导致 GitHub 直连失败环境

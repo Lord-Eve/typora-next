@@ -1,4 +1,4 @@
-//! Resolve paper landing pages to open-access PDFs (Sprint 29b).
+//! Resolve paper landing pages to open-access PDFs.
 //!
 //! AnySearch academic search returns Semantic Scholar / publisher landing
 //! pages, but the MinerU pipeline only consumes direct PDF URLs. This module

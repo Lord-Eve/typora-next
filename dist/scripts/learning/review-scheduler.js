@@ -2,7 +2,7 @@
  * Review Scheduler
  * Ebbinghaus forgetting curve + spaced repetition for learning concepts
  *
- * Sprint 4: 遗忘曲线提醒系统
+ * 遗忘曲线提醒系统
  */
 
 (function() {

@@ -1,5 +1,5 @@
 /**
- * Notebook Modal Shell - 笔记本式对话面板外壳（Sprint 17）
+ * Notebook Modal Shell - 笔记本式对话面板外壳
  *
  * 从 socratic-modal.js 抽出的 UI 外壳：header（图标/标题/副标题/chips）+
  * 聊天气泡流 + 底部输入区。引擎（苏格拉底复习 / 案例研习）提供文案与
@@ -176,7 +176,7 @@
     }
 
     /**
-     * 流式气泡（Sprint 17）：先建空气泡，随 delta 累积重渲染。
+     * 流式气泡：先建空气泡，随 delta 累积重渲染。
      * @returns {{el: Element, update: (text: string) => void, finalize: (text: string) => void, remove: () => void}}
      */
     startTutorStream() {

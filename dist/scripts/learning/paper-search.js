@@ -7,8 +7,8 @@
  *     (reading is an explicit second step, so the search page is never lost)
  *   - batch cache: checkboxes + one button, sequential import, failures
  *     collected and surfaced without aborting the batch
- *   - cached papers show a 已缓存 badge + 打开/📂 buttons (Sprint 30)
- *   - Sprint 30: re-entering the welcome page does NOT restore the last
+ *   - cached papers show a 已缓存 badge + 打开/📂 buttons
+ *   - re-entering the welcome page does NOT restore the last
  *     search — PaperLibrary shows the cached papers grouped by domain
  *     instead (course-hub interaction language); the search form always
  *     starts a fresh search
@@ -37,7 +37,7 @@
     _hasKey: false,
     // url → ImportIndexEntry；已缓存论文的标记集合
     _importedMap: {},
-    // 上次搜索关键词（仅作本次会话缓存时的领域标签；Sprint 30 起不再用于恢复结果）
+    // 上次搜索关键词（仅作本次会话缓存时的领域标签；起不再用于恢复结果）
     _lastQuery: null,
     // url → true：正在缓存中的论文（按钮忙态，防重复点击）
     _busyUrls: {},
@@ -45,7 +45,7 @@
     /**
      * Attach (idempotently) a search section to `container`.
      * Re-probes config each time: settings may change between visits.
-     * Sprint 30: 不再恢复上次搜索结果——重进欢迎页由 PaperLibrary
+     * 不再恢复上次搜索结果——重进欢迎页由 PaperLibrary
      * 按领域展示已缓存论文（课程选择的交互语言），搜索框始终是新搜索。
      */
     async attach(container) {
@@ -134,7 +134,7 @@
 
       // 进度条专用槽位：PaperImport.showProgress 会 innerHTML 覆盖容器，
       // 必须隔离，否则导入时结果列表被清空。
-      // Sprint 30：槽位置于结果列表**之前**——之前在列表之后，
+      // 槽位置于结果列表**之前**——之前在列表之后，
       // 结果一多进度就在视口外，用户点了缓存毫无感知。
       const slot = document.createElement('div');
       slot.className = 'paper-search-progress-slot';
@@ -325,7 +325,7 @@
         importBtn.addEventListener('click', () => this._openCached(cached));
         el.appendChild(importBtn);
 
-        // Sprint 30：已缓存论文可直达所在文件夹（用户找不到文件的反馈）
+        // 已缓存论文可直达所在文件夹（用户找不到文件的反馈）
         const folderBtn = document.createElement('button');
         folderBtn.className = 'paper-search-folder-btn';
         folderBtn.textContent = '📂';
@@ -337,7 +337,7 @@
         });
         el.appendChild(folderBtn);
       } else if (item.url && this._busyUrls[item.url]) {
-        // 缓存进行中：按钮忙态（Sprint 30：缓存无 loading 感知的修复）
+        // 缓存进行中：按钮忙态（缓存无 loading 感知的修复）
         importBtn.className = 'paper-search-import-btn paper-search-btn-busy';
         importBtn.textContent = '缓存中…';
         importBtn.disabled = true;
@@ -392,7 +392,7 @@
           PaperImport.hideProgress(slot);
         }
         this._setVisible(error, false);
-        // 只缓存不跳阅读：搜索页保持可用（Sprint 29c UX 修正）
+        // 只缓存不跳阅读：搜索页保持可用（UX 修正）
         this._importedMap[item.url] = {
           url: item.url,
           md_path: result.md_path,
@@ -403,7 +403,7 @@
         this._setVisible(status, true);
         this._renderResults();
       } catch (err) {
-        // Sprint 31：错误不是终点——失败（含错误全文）交给 agent 批量补救。
+        // 错误不是终点——失败（含错误全文）交给 agent 批量补救。
         // 无 AI 配置 / 补救本身失败时回退到旧错误路径，透出原始错误。
         const message = String((err && err.message) || err);
         const rescue = await this._rescueFailures(
@@ -420,7 +420,7 @@
           this._renderResults();
         } else {
           const finalMessage = rescue ? rescue.stillFailed[0].message : message;
-          // 结果列表保持不动，透出具体原因（Sprint 2 教训：失败要有恢复路径）
+          // 结果列表保持不动，透出具体原因（教训：失败要有恢复路径）
           error.textContent = `缓存失败：${finalMessage}`;
           error.appendChild(document.createElement('br'));
           // 无开放获取 PDF 时给出浏览器打开的逃生门（下载后走本地 PDF 导入）
@@ -454,7 +454,7 @@
     },
 
     /**
-     * Sprint 31：把全部失败一次性交给 agent 批量补救（不是一篇一调）。
+     * 把全部失败一次性交给 agent 批量补救（不是一篇一调）。
      * failures: [{title, url, message}]（message 为错误全文，agent 的上下文）。
      * 返回 { stillFailed: [...] }；补救成功的篇目直接登记进 _importedMap。
      * 无 AI 配置 / 补救失败 → 返回 null（调用方回退旧错误路径）。
@@ -558,7 +558,7 @@
         }
       }
 
-      // Sprint 31：循环内只收集失败不展示；全部失败一次性交给 agent 批量补救
+      // 循环内只收集失败不展示；全部失败一次性交给 agent 批量补救
       // （用户原则：重试对象是所有失败一起，由 agent 判断规划）。
       // ok 计数在补救成功后补齐；仍失败的透出组合错误。
       if (failures.length > 0) {
@@ -581,8 +581,7 @@
         this._setVisible(status, true);
         this._setVisible(error, false);
       } else {
-        // 逐条列出失败原因；可解析性失败各自带浏览器逃生门（Sprint 30：
-        // 之前只显示第一条原因，其余失败用户无法处置）
+        // 逐条列出失败原因；可解析性失败各自带浏览器逃生门（// 之前只显示第一条原因，其余失败用户无法处置）
         error.textContent = `批量缓存完成：成功 ${ok}，失败 ${failures.length}`;
         failures.forEach((f) => {
           const row = document.createElement('div');

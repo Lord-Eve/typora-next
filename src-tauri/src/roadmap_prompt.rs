@@ -1,4 +1,4 @@
-//! 课程完结 roadmap 的 prompt 构建与响应解析（Sprint 22）。
+//! 课程完结 roadmap 的 prompt 构建与响应解析。
 //!
 //! 纯逻辑模块（无 Tauri 依赖），经 `#[path]` include 方式被
 //! tests/roadmap_prompt_test.rs 直接测试（规避 app_lib 链接问题）。
@@ -26,7 +26,7 @@ fn intent_instruction(intent: &str) -> Option<&'static str> {
 ///
 /// - `course_name`：刚完结的课程名
 /// - `profile`：`.learning/completion-profile.json` 内容（可为 None / 损坏时调用方传 None）
-/// - `learner_context`：Sprint 21 全局索引聚合出的其他课程历史（可为 None）
+/// - `learner_context`：全局索引聚合出的其他课程历史（可为 None）
 /// - `intent`：换一批意向（harder/gentler/different），None 表示首次生成
 /// - `exclude_goals`：此前已推荐过、用户不要的方向（换一批时累积）
 pub fn build_roadmap_prompt(

@@ -354,12 +354,12 @@
         status: getChapterStatus(ch, chaptersStatus)
       }));
 
-      // Sprint 16: 课程完结终态（落盘字段或全章节完成派生）
+      // 课程完结终态（落盘字段或全章节完成派生）
       const courseCompleted = window.CourseCompletion && window.CourseCompletion.isProjectCourseCompleted
         ? window.CourseCompletion.isProjectCourseCompleted(project)
         : false;
 
-      // Sprint 21: 存量完结课程补结课档案 + 全局索引（best-effort，不阻塞加载）
+      // 存量完结课程补结课档案 + 全局索引（best-effort，不阻塞加载）
       if (courseCompleted && window.__TAURI__) {
         window.__TAURI__.core.invoke('backfill_completion_profile', { projectPath: basePath })
           .catch(e => console.warn('[ProjectDashboard] backfill completion profile failed (non-fatal):', e));
@@ -718,7 +718,7 @@
               projectName: (project && project.name) || '学习项目',
               projectPath: basePath,
               dueCount,
-              // Sprint 16: 课程完结终态
+              // 课程完结终态
               courseCompleted: window.CourseCompletion && window.CourseCompletion.isProjectCourseCompleted
                 ? window.CourseCompletion.isProjectCourseCompleted(project)
                 : false

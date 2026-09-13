@@ -1,7 +1,7 @@
 /**
- * Course Completion - 课程完结状态的读侧派生（Sprint 16 起）
+ * Course Completion - 课程完结状态的读侧派生（起）
  *
- * 本模块是 course-summary.js 删除后的幸存者：幻灯片总结功能已移除（Sprint 22），
+ * 本模块是 course-summary.js 删除后的幸存者：幻灯片总结功能已移除，
  * 但完结状态判定与复习入口展示决策仍被 project-resume / knowledge-graph-dashboard
  * 依赖，故独立成此小模块。
  *
@@ -16,7 +16,7 @@
   }
 
   /**
-   * 课程是否完结（读侧派生，Sprint 16）。
+   * 课程是否完结（读侧派生）。
    * 完结 = project.json 顶层 course_status === 'completed'（写侧落盘）
    *   或全部章节状态为 completed/已完成（存量项目兼容，含 v1 chapter.status）。
    * @param {object} project - project.json 对象（{ chapters, chapters_status, course_status? }）
@@ -34,7 +34,7 @@
   }
 
   /**
-   * Dashboard 复习入口展示决策（Sprint 16）。
+   * Dashboard 复习入口展示决策。
    * 完结课程：入口常驻、不带计数徽标、不用提醒态样式（不再催复习）；
    * 未完结：仅有到期项时显示，且带计数 + 提醒态。
    * @returns {{visible: boolean, showCount: boolean, count: number, urgent: boolean}}

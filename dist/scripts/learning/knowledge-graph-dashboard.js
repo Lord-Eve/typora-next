@@ -3,7 +3,7 @@
  * Shows project stats + concept dependency graph + action buttons.
  * Pops up every time user enters a learning project.
  *
- * Sprint 4: 知识图谱仪表盘
+ * 知识图谱仪表盘
  */
 
 (function() {
@@ -130,7 +130,7 @@
         modal.appendChild(list);
       }
 
-      // Sprint 22: 📍 下一站 roadmap（仅完结课程；卡片点击 → 关闭仪表盘并预填创建对话框）
+      // 📍 下一站 roadmap（仅完结课程；卡片点击 → 关闭仪表盘并预填创建对话框）
       if (data.courseCompleted && data.projectPath && window.CourseRoadmap && window.__TAURI__) {
         const section = window.CourseRoadmap.createRoadmapSection({
           projectPath: data.projectPath,
@@ -177,7 +177,7 @@
       title.textContent = projectName || '学习项目';
       header.appendChild(title);
 
-      // Sprint 16: 课程完结终态标识（用户能感知当前所处状态）
+      // 课程完结终态标识（用户能感知当前所处状态）
       if (courseCompleted) {
         const badge = document.createElement('span');
         badge.className = 'kg-course-completed-badge';
@@ -418,7 +418,7 @@
       actions.className = 'kg-actions';
 
       // Review button (project-level entry)
-      // Sprint 16: 完结课程入口常驻、不带计数徽标（不再催复习）；决策纯函数在 course-completion.js
+      // 完结课程入口常驻、不带计数徽标（不再催复习）；决策纯函数在 course-completion.js
       const dueCount = (data && data.dueCount) || 0;
       const spec = (window.CourseCompletion && window.CourseCompletion.getReviewEntrySpec)
         ? window.CourseCompletion.getReviewEntrySpec(!!(data && data.courseCompleted), dueCount)

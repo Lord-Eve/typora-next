@@ -114,7 +114,7 @@ TestRunner.test('enhanceLearningElements skips when not in learning mode', () =>
   LMI.enhanceLearningElements();
 
   TestRunner.assert(
-    !bq._dataset.sprint3Enhanced,
+    !bq._dataset.enhanced,
     'Should not mark blockquote when not in learning mode'
   );
 });
@@ -130,8 +130,8 @@ TestRunner.test('enhanceLearningElements marks concept callout in learning mode'
 
   LMI.enhanceLearningElements();
 
-  TestRunner.assertEquals(bq._dataset.sprint3Enhanced, 'true', 'Should mark as enhanced');
-  TestRunner.assertEquals(bq._dataset.sprint3Type, 'concept', 'Should detect concept type');
+  TestRunner.assertEquals(bq._dataset.enhanced, 'true', 'Should mark as enhanced');
+  TestRunner.assertEquals(bq._dataset.enhancedType, 'concept', 'Should detect concept type');
 });
 
 TestRunner.test('enhanceLearningElements marks question callout in learning mode', () => {
@@ -145,7 +145,7 @@ TestRunner.test('enhanceLearningElements marks question callout in learning mode
 
   LMI.enhanceLearningElements();
 
-  TestRunner.assertEquals(bq._dataset.sprint3Type, 'question', 'Should detect question type');
+  TestRunner.assertEquals(bq._dataset.enhancedType, 'question', 'Should detect question type');
 });
 
 TestRunner.test('enhanceLearningElements cleans checkmarks from quiz callout', () => {

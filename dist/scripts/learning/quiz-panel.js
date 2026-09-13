@@ -2,7 +2,7 @@
  * Quiz Panel
  * Chapter-end mastery check + adaptive feedback
  *
- * Sprint 3 task 3.2 + 3.4
+ * task 3.2 + 3.4
  *
  * State machine:
  *   hidden → loading → ready → answering → submitting → graded
@@ -198,7 +198,7 @@
       };
       this._setState('graded');
 
-      // Trigger adaptive feedback (Sprint 3 task 3.4)
+      // Trigger adaptive feedback
       // mastered → skip adapt; learning/struggling → request adapt
       if (this.onAdaptRequested && this._result.rating !== 'mastered') {
         this.onAdaptRequested({
@@ -208,7 +208,7 @@
         });
       }
 
-      // Persist to quiz history (Sprint 3 decision: 持久化到 quiz-history.json)
+      // Persist to quiz history (decision: 持久化到 quiz-history.json)
       if (this.onSaveHistory) {
         this.onSaveHistory({
           chapter: this._chapterFile,

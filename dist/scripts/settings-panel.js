@@ -1,7 +1,7 @@
 /**
  * Settings Panel — grouped settings UI (AI / 论文服务 / 外观).
  *
- * Extracted from main.js (Sprint 29 refactor):
+ * Extracted from main.js (refactor):
  *   - groups settings into tabs instead of one flat scrollable list
  *   - save() merges with the current config so UI state fields
  *     (sidebar_collapsed / sidebar_active_tab / last_file) are never
@@ -201,7 +201,7 @@
       dirRow.appendChild(openBtn);
       dirRow.appendChild(resetBtn);
       group.appendChild(labeledItem('论文库根目录', dirRow));
-      // Sprint 30：hint 动态化——显示解析后的实际目录，默认位置不再是谜
+      // hint 动态化——显示解析后的实际目录，默认位置不再是谜
       const dirHint = el('div', 'setting-hint', '缓存的论文按搜索领域自动分目录存放（根目录/领域/年月），留空用默认位置');
       dirHint.id = 'settingPapersDirHint';
       group.appendChild(dirHint);

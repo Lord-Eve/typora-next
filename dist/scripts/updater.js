@@ -22,7 +22,7 @@
 
       try {
         const { invoke } = window.__TAURI__.core;
-        // Sprint 27：插件的 reqwest 未启用 system-proxy，GUI 进程也继承不到
+        // 插件的 reqwest 未启用 system-proxy，GUI 进程也继承不到
         // 终端的 HTTPS_PROXY——由 Rust 侧探测（env → Windows 注册表）后显式传入。
         // Update 资源在 check 时固化代理配置，download_and_install 自动沿用。
         let proxy = null;
@@ -50,7 +50,7 @@
           async downloadAndInstall(onEvent) {
             // onEvent 是插件命令的必填 key：不传回调也要给 no-op Channel——
             // 否则 JSON 序列化丢弃 undefined，Rust 报 missing required key
-            // onEvent（v0.4.3 即因此无法应用内升级，Sprint 27 补牢）
+            // onEvent（v0.4.3 即因此无法应用内升级，补牢）
             const channel = createChannel(typeof onEvent === 'function' ? onEvent : () => {});
             if (!channel) {
               throw new Error('下载通道初始化失败：Tauri Channel 不可用');
@@ -67,7 +67,7 @@
           console.log('[Updater] Not configured:', err);
           return { available: false, error: '未配置更新服务', notConfigured: true };
         }
-        // Sprint 27：网络等其他失败必须透出真实错误，不能误诊为「未配置」
+        // 网络等其他失败必须透出真实错误，不能误诊为「未配置」
         console.warn('[Updater] Check failed:', err);
         return { available: false, error: String(err) };
       }

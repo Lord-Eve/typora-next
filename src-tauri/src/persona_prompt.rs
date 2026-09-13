@@ -1,4 +1,4 @@
-//! Learner persona (Sprint 23): domain portfolio + analogy material bank.
+//! Learner persona: domain portfolio + analogy material bank.
 //!
 //! Pure functions only — no tauri, no IO, no LLM. The persona is a *derived
 //! cache*: its only source of truth are the per-course completion profiles

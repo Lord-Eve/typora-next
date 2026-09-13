@@ -115,7 +115,7 @@
   margin-top: 10px;
 }
 
-/* Sprint 21 v2: 创建对话框左右两栏（左表单 + 右学习历史选择面板） */
+/* 创建对话框左右两栏（左表单 + 右学习历史选择面板） */
 .learning-input-cols {
   display: flex;
   gap: 16px;
@@ -127,7 +127,7 @@
   min-width: 0;
 }
 
-/* Sprint 21: 跨课记忆（现为右栏课程级选择面板；保留旧 class 作为容器皮肤） */
+/* 跨课记忆（现为右栏课程级选择面板；保留旧 class 作为容器皮肤） */
 .learner-context-hint {
   padding: 8px 12px;
   background: var(--color-bg-secondary, #f5f5f7);
@@ -171,7 +171,7 @@
   margin: -2px 0 7px;
 }
 
-/* Sprint 23: 学习者画像摘要行与明细（位于面板帮助文案与搜索框之间） */
+/* 学习者画像摘要行与明细（位于面板帮助文案与搜索框之间） */
 .learner-persona-row {
   display: flex;
   align-items: center;
@@ -391,7 +391,7 @@
   padding: 8px 4px;
 }
 
-/* Sprint 22: 📍 下一站 roadmap（知识图谱仪表盘，完结课程） */
+/* 📍 下一站 roadmap（知识图谱仪表盘，完结课程） */
 .roadmap-section {
   margin-top: 14px;
   border-top: 1px solid var(--color-border, #e0e0e4);
@@ -2449,7 +2449,7 @@ body.learning-mode .toolbar {
 }
 
 /* ============================================
-   Cornell Sidebar (Sprint 6 PB2)
+   Cornell Sidebar
    ============================================ */
 
 .cornell-sidebar {
@@ -3804,7 +3804,7 @@ body.learning-mode .toolbar {
   cursor: not-allowed;
 }
 
-/* Sprint 16: 课程完结终态徽标 */
+/* 课程完结终态徽标 */
 .kg-course-completed-badge {
   display: inline-block;
   margin-top: 0;
@@ -3818,7 +3818,7 @@ body.learning-mode .toolbar {
   border-radius: 999px;
 }
 
-/* Sprint 17: Cornell 操作行（解释 / 案例研习）——位于 header 下方，
+/* Cornell 操作行（解释 / 案例研习）——位于 header 下方，
    不放在 footer：底部 fixed 进度条（.learning-progress）会遮挡 footer */
 .cornell-sidebar-actions {
   display: flex;
@@ -3846,7 +3846,7 @@ body.learning-mode .toolbar {
   cursor: not-allowed;
 }
 
-/* Sprint 17: 案例研习历史列表 */
+/* 案例研习历史列表 */
 .casestudy-history-list {
   max-height: 50vh;
   overflow-y: auto;
@@ -3875,7 +3875,7 @@ body.learning-mode .toolbar {
   color: var(--color-text-secondary, #6b7280);
 }
 
-/* Sprint 17: 气泡内 markdown 渲染（notebook-modal socratic-bubble-md） */
+/* 气泡内 markdown 渲染（notebook-modal socratic-bubble-md） */
 .socratic-bubble-md h3, .socratic-bubble-md h4 {
   margin: 8px 0 4px;
   font-size: 14px;
@@ -3908,7 +3908,7 @@ body.learning-mode .toolbar {
   color: var(--color-text-secondary, #6b7280);
 }
 
-/* Sprint 17: 流式气泡光标 */
+/* 流式气泡光标 */
 .socratic-bubble-streaming::after {
   content: '▋';
   margin-left: 2px;
@@ -3920,7 +3920,7 @@ body.learning-mode .toolbar {
   50% { opacity: 0; }
 }
 
-/* Sprint 16 实机反馈：完结课程复习入口去提醒态 —— 仅去计数不够，
+/* 实机反馈：完结课程复习入口去提醒态 —— 仅去计数不够，
    橙红渐变本身就是「今日有到期复习项」的视觉催促；calm 修饰类改中性样式 */
 .kg-action-btn.kg-action-review.kg-action-review-calm {
   background: var(--color-bg-secondary);
@@ -3935,7 +3935,7 @@ body.learning-mode .toolbar {
   box-shadow: none;
 }
 
-/* Sprint 16 实机反馈：图谱模式 dashboard 一屏看完 —— modal 固定 88vh
+/* 实机反馈：图谱模式 dashboard 一屏看完 —— modal 固定 88vh
    flex 列布局，canvas 吃掉剩余高度（D3 按真实 clientHeight 渲染），
    header/stats/actions 恒在视口内，无滚轮 */
 .kg-dashboard-modal--has-graph {
@@ -4037,7 +4037,7 @@ body.learning-mode .toolbar {
   }
 }
 
-/* Sprint 26: 人文课试听嵌入卡片（wikimedia-commons skill 输出） */
+/* 人文课试听嵌入卡片（wikimedia-commons skill 输出） */
 .audio-embed {
   margin: 12px 0;
   padding: 12px 16px;

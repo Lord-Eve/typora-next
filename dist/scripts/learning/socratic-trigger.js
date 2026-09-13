@@ -1,7 +1,6 @@
 /**
  * Socratic Review — Trigger Decision
- * Sprint 8
- *
+ * *
  * Pure decision: should we show the Socratic review prompt to the user?
  * Extracted as a free function for testability.
  */

@@ -1,5 +1,5 @@
 /**
- * Case Study Modal - 案例研习（Sprint 17）
+ * Case Study Modal - 案例研习
  *
  * 划词选概念 → AI 生成三段式教学案例（情境/分析/回扣）→ 自由追问。
  * UI 复用 NotebookModal 外壳（与苏格拉底同款笔记本对话框）；
@@ -106,7 +106,7 @@
     }
 
     async _sendCaseTurn(userAnswer) {
-      // Sprint 17 流式输出：监听 Rust 转发的 case_study_delta 事件，
+      // 流式输出：监听 Rust 转发的 case_study_delta 事件，
       // 首个 delta 到达后撤掉 loading、改为流式气泡实时渲染；
       // 无事件能力（Node 测试/mock）走原 loading + 一次性渲染兜底。
       let stream = null;

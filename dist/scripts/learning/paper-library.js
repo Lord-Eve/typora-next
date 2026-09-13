@@ -1,7 +1,7 @@
 /**
- * Paper Library — 论文库首页（Sprint 30）
+ * Paper Library — 论文库首页
  *
- * 重进论文导读时不再恢复上次搜索结果（Sprint 29c 的做法被用户否定），
+ * 重进论文导读时不再恢复上次搜索结果（的做法被用户否定），
  * 而是像课程模式 hub 一样，把全局导入索引按领域分组展示，让用户
  * 选择之前保存的论文直接进入阅读。
  *
@@ -123,7 +123,7 @@
       chevron.textContent = '›';
       header.appendChild(chevron);
 
-      // Sprint 30c：整个领域（论文集）可删除——真删除，磁盘文件一并清理
+      // 整个领域（论文集）可删除——真删除，磁盘文件一并清理
       const delBtn = document.createElement('button');
       delBtn.className = 'paper-library-delete-domain-btn';
       delBtn.textContent = '🗑️';
@@ -173,7 +173,7 @@
       folderBtn.addEventListener('click', () => this._revealPaper(entry));
       item.appendChild(folderBtn);
 
-      // Sprint 30c：论文删除是真删除——磁盘文件 + 索引条目一并清理
+      // 论文删除是真删除——磁盘文件 + 索引条目一并清理
       const delBtn = document.createElement('button');
       delBtn.className = 'paper-library-delete-btn';
       delBtn.textContent = '🗑️';

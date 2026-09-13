@@ -1,4 +1,4 @@
-//! Agent-based batch rescue for failed paper imports (Sprint 31).
+//! Agent-based batch rescue for failed paper imports.
 //!
 //! 用户原则：错误不是终点——全部失败条目（url/title/error 全文）一次性交给
 //! agent 判断规划（批量视角：系统性 429 → 统一换源；单篇无 OA → 搜替代源），

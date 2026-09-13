@@ -1,7 +1,7 @@
 /**
  * Update Progress — 更新下载进度的状态机（纯函数，可测试）
  *
- * 设计背景（Sprint 27，2026-09-09 实测）：0.4.2 → 0.4.3 更新时点击「更新」
+ * 设计背景（2026-09-09 实测）：0.4.2 → 0.4.3 更新时点击「更新」
  * 后横幅消失、全程无进度无状态。根因：performUpdate 的状态只写 About 面板
  * 内的 #updateStatus（未打开时不可见），且 downloadAndInstall 未接 onEvent
  * Channel，tauri-plugin-updater 的 Started/Progress/Finished 事件全部丢弃。

@@ -2,7 +2,7 @@
  * Selection Explainer
  * Text selection → AI explanation workflow
  *
- * Sprint 3 task 3.5
+ * task 3.5
  */
 
 (function() {
@@ -40,7 +40,7 @@
   }
 
   const MAX_SELECTION_LENGTH = 200;
-  const EXPLANATION_MAX_LENGTH = 300;  // Sprint 3 decision
+  const EXPLANATION_MAX_LENGTH = 300;  // 上限决策
 
   // UI element classes that should be excluded from "in learning content" check
   const EXCLUDED_PARENT_CLASSES = [

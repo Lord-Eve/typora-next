@@ -6,7 +6,7 @@
  * - parseExplainResponse: 解析 LLM JSON 响应，含降级逻辑
  * - computeConceptHash:  概念 hash（大小写/空格不敏感）
  *
- * Sprint 6 PB1: 用户选中文字得到有上下文的解释 + 推荐追问
+ * 用户选中文字得到有上下文的解释 + 推荐追问
  */
 
 (function() {

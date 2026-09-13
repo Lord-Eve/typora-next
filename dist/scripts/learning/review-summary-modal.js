@@ -2,7 +2,7 @@
  * Review Summary Modal
  * Post-review completion modal: shows concept status changes + mini knowledge graph.
  *
- * Sprint 4: 复习完成摘要
+ * 复习完成摘要
  */
 
 (function() {

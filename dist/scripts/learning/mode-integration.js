@@ -2,7 +2,7 @@
  * Learning Mode UI Integration
  * Connects QuizPanel + SelectionExplainer to the main UI
  *
- * Sprint 3 UI integration layer
+ * UI integration layer
  *
  * Provides:
  * 1. enhanceLearningMode() - Replaces !concept/!question/!quiz callouts with interactive cards
@@ -28,7 +28,7 @@
   let _reviewCheckInProgress = false;
   let _reviewLoadingEl = null;
 
-  // Sprint 6 PB2: Cornell Sidebar state
+  // Cornell Sidebar state
   let _cornellSidebarEl = null;      // sidebar DOM element
   let _cornellCueIdCounter = 0;      // cue ID counter
   let _cornellCues = [];             // cue data array
@@ -56,14 +56,14 @@
    * Triggered after each renderMarkdown() call
    */
   function enhanceLearningElements() {
-    console.log('[Sprint3] enhanceLearningElements called');
+    console.log('enhanceLearningElements called');
     const inCourse = window.AppWorkspace?.isIn('course') ?? document.body.classList.contains('learning-mode');
-    if (!inCourse) { console.log('[Sprint3] not in course workspace, skip'); return; }
+    if (!inCourse) { console.log('not in course workspace, skip'); return; }
 
     const md = document.getElementById('markdownBody');
     if (!md) return;
 
-    const allBlockquotes = md.querySelectorAll('blockquote:not([data-sprint3-enhanced])');
+    const allBlockquotes = md.querySelectorAll('blockquote:not([data-enhanced])');
     let enhanced = 0;
 
     allBlockquotes.forEach(bq => {
@@ -90,8 +90,8 @@
       if (!type) return;
 
       // Mark as enhanced
-      bq.dataset.sprint3Enhanced = 'true';
-      bq.dataset.sprint3Type = type;
+      bq.dataset.enhanced = 'true';
+      bq.dataset.enhancedType = type;
 
       if (type === 'answer') {
         // Let answer be an independent collapsible callout, don't merge
@@ -108,7 +108,7 @@
       enhanced++;
     });
 
-    console.log('[Sprint3] enhanced', enhanced, 'callout blocks');
+    console.log('enhanced', enhanced, 'callout blocks');
   }
 
   // ============================================
@@ -144,14 +144,14 @@
   // ============================================
 
   function setupQuizPanel(chapterFile, projectPath) {
-    console.log('[Sprint3] setupQuizPanel called, chapterFile:', chapterFile, 'projectPath:', projectPath);
-    if (!window.QuizPanel) { console.warn('[Sprint3] QuizPanel not loaded'); return; }
+    console.log('setupQuizPanel called, chapterFile:', chapterFile, 'projectPath:', projectPath);
+    if (!window.QuizPanel) { console.warn('QuizPanel not loaded'); return; }
     const inCourse = window.AppWorkspace?.isIn('course') ?? document.body.classList.contains('learning-mode');
-    if (!inCourse) { console.log('[Sprint3] not in course workspace, skip quiz'); return; }
+    if (!inCourse) { console.log('not in course workspace, skip quiz'); return; }
 
     _projectPath = projectPath || '';
     _currentChapterFile = chapterFile || '';
-    console.log('[Sprint6] setupQuizPanel projectPath=', _projectPath, 'chapterFile=', _currentChapterFile);
+    console.log('setupQuizPanel projectPath=', _projectPath, 'chapterFile=', _currentChapterFile);
     _quizPanel = new window.QuizPanel({ chapterFile: chapterFile || 'unknown' });
     _quizPanel.onSaveHistory = onQuizSaveHistory;
     _quizPanel.onAdaptRequested = onQuizAdaptRequested;
@@ -261,7 +261,7 @@
         const docHeight = document.documentElement.scrollHeight - window.innerHeight;
         progress = docHeight > 0 ? window.scrollY / docHeight : 0;
       }
-      console.log('[Sprint3] scroll progress:', Math.round(progress * 100) + '%');
+      console.log('scroll progress:', Math.round(progress * 100) + '%');
       if (progress - lastProgress > 0.05 || progress >= 0.8) {
         lastProgress = progress;
         if (_quizPanel) _quizPanel.notifyScrollProgress(progress);
@@ -835,7 +835,7 @@
         }
       }
 
-      // Sprint 8a: Trigger Socratic review if threshold reached
+      // Trigger Socratic review if threshold reached
       _maybeTriggerSocratic();
     } catch (err) {
       const msg = (err && err.message) || String(err);
@@ -844,7 +844,7 @@
     }
   }
 
-  // Sprint 8a MVP: increment quiz count + check Socratic trigger
+  // MVP: increment quiz count + check Socratic trigger
   async function _maybeTriggerSocratic() {
     if (!window.SocraticState || !window.SocraticTrigger) return;
     try {
@@ -868,7 +868,7 @@
   }
 
   function _showSocraticToast(toast) {
-    // Minimal toast UI (Sprint 8a MVP)
+    // Minimal toast UI (MVP)
     const existing = document.getElementById('socraticTriggerToast');
     if (existing) existing.remove();
     const el = document.createElement('div');
@@ -1261,22 +1261,22 @@
   }
 
   // ============================================
-  // 3. Cornell Sidebar (Sprint 6 PB2)
+  // 3. Cornell Sidebar
   //    Replaces modal-based explain with 180px permanent sidebar + cue list
   // ============================================
 
   function setupSelectionExplainer() {
-    console.log('[Sprint6] setupSelectionExplainer');
+    console.log('setupSelectionExplainer');
     const inCourse = window.AppWorkspace?.isIn('course') ?? document.body.classList.contains('learning-mode');
     if (!inCourse) {
-      console.log('[Sprint6] not in course workspace, skip sidebar');
+      console.log('not in course workspace, skip sidebar');
       return;
     }
 
     // Detect chapter change by file path (reliable for persistence)
     const chapterChanged = _currentChapterFile && _currentChapterFile !== _lastChapterFileForSidebar;
     if (chapterChanged) {
-      console.log('[Sprint6] chapter changed from', _lastChapterFileForSidebar, 'to', _currentChapterFile);
+      console.log('chapter changed from', _lastChapterFileForSidebar, 'to', _currentChapterFile);
       teardownCornellSidebar();
       _lastChapterFileForSidebar = _currentChapterFile;
       initCornellSidebar();
@@ -1295,7 +1295,7 @@
 
   function initCornellSidebar() {
     const sidebar = document.getElementById('cornellSidebar');
-    if (!sidebar) { console.warn('[Sprint6] cornellSidebar element not found'); return; }
+    if (!sidebar) { console.warn('cornellSidebar element not found'); return; }
 
     _cornellSidebarEl = sidebar;
     sidebar.style.display = '';
@@ -1318,7 +1318,7 @@
       <div class="cornell-sidebar-footer" id="cornellSidebarFooter">💡 选中文字后可解释或生成案例</div>
     `;
 
-    // 案例研习记录入口（Sprint 17 UX 修正：新建案例只在划词气泡原地触发，
+    // 案例研习记录入口（UX 修正：新建案例只在划词气泡原地触发，
     // 侧栏按钮 = 纯历史回看；解释走划词气泡 🤖 / cue 卡片）
     const caseStudyBtn = document.getElementById('caseStudyBtn');
     if (caseStudyBtn) {
@@ -1421,7 +1421,7 @@
       const md = document.getElementById('markdownBody');
       let chapterGoal = '';
       if (md) {
-        const callout = md.querySelector('blockquote[data-sprint3-enhanced]');
+        const callout = md.querySelector('blockquote[data-enhanced]');
         if (callout) {
           chapterGoal = callout.textContent.trim().substring(0, 200);
         }
@@ -1597,7 +1597,7 @@
   }
 
   // ============================================
-  // Sprint 6 PB3: Persistence
+  // Persistence
   // ============================================
 
   async function loadChapterExplanations() {
@@ -1658,7 +1658,7 @@
         }
       }
     } catch (err) {
-      console.warn('[Sprint6] loadChapterExplanations failed:', err);
+      console.warn('loadChapterExplanations failed:', err);
     }
   }
 
@@ -1683,7 +1683,7 @@
       await window.__TAURI__.core.invoke('persist_explanation', payload);
       updateExtraReviewButton();
     } catch (err) {
-      console.warn('[Sprint6] persistCue failed:', err);
+      console.warn('persistCue failed:', err);
     }
   }
 
@@ -1862,12 +1862,12 @@
   }
 
   // ============================================
-  // 4. Daily Review (Sprint 4: 遗忘曲线提醒)
+  // 4. Daily Review (遗忘曲线提醒)
   // ============================================
 
   function showReviewModal(projectPath, items, cards) {
     if (!window.ReviewModal) {
-      console.warn('[Sprint4] ReviewModal not loaded');
+      console.warn('ReviewModal not loaded');
       return;
     }
     if (_reviewModal && _reviewModal.getState() !== 'hidden') return;
@@ -1901,7 +1901,7 @@
 
   async function checkDailyReview(projectPath) {
     if (!window.ReviewScheduler || !window.ReviewModal) {
-      console.warn('[Sprint4] ReviewScheduler or ReviewModal not loaded');
+      console.warn('ReviewScheduler or ReviewModal not loaded');
       return;
     }
     if (_reviewModal && _reviewModal.getState() !== 'hidden') return;
@@ -1915,7 +1915,7 @@
       const cards = await scheduler.getReviewCards(projectPath);
       showReviewModal(projectPath, items, cards);
     } catch (err) {
-      console.error('[Sprint4] checkDailyReview error:', err);
+      console.error('checkDailyReview error:', err);
     }
   }
 
@@ -2048,7 +2048,7 @@
   }
 
   // ============================================
-  // 5. Review Summary Modal (Sprint 4: 知识图谱)
+  // 5. Review Summary Modal (知识图谱)
   // ============================================
 
   async function showReviewSummary(projectPath, items, answers, beforeStatus) {
@@ -2083,12 +2083,12 @@
         miniGraph: graph
       });
     } catch (e) {
-      console.warn('[Sprint4] showReviewSummary error:', e);
+      console.warn('showReviewSummary error:', e);
     }
   }
 
   // ============================================
-  // Sprint 17: Case Study（案例研习）
+  // Case Study（案例研习）
   // ============================================
 
   /**
@@ -2097,7 +2097,7 @@
    */
   async function openCaseStudy(term) {
     if (!window.CaseStudyModal) {
-      console.warn('[Sprint17] CaseStudyModal not loaded');
+      console.warn('CaseStudyModal not loaded');
       return;
     }
     if (!term) {
@@ -2110,7 +2110,7 @@
     let chapterGoal = '';
     const md = document.getElementById('markdownBody');
     if (md) {
-      const callout = md.querySelector('blockquote[data-sprint3-enhanced]');
+      const callout = md.querySelector('blockquote[data-enhanced]');
       if (callout) chapterGoal = callout.textContent.trim().substring(0, 200);
     }
     let surroundingText = '';

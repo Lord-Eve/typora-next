@@ -2,7 +2,7 @@
  * Knowledge Graph Manager
  * Data layer for knowledge graph: freshness check, loading, stats, status merge.
  *
- * Sprint 4: 知识图谱模块
+ * 知识图谱模块
  */
 
 (function() {

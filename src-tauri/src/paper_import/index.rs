@@ -1,4 +1,4 @@
-//! Import index: which paper URLs have been cached locally (Sprint 29c).
+//! Import index: which paper URLs have been cached locally.
 //!
 //! Search results should show "已缓存" for papers already imported. The index
 //! is a JSON file at `{app_local_data_dir}/papers/import_index.json` mapping
@@ -22,8 +22,8 @@ pub struct ImportIndexEntry {
     pub title: Option<String>,
     /// RFC3339 timestamp of the cache.
     pub cached_at: String,
-    /// Search keyword that found this paper (Sprint 30) — the paper library
-    /// home groups entries by it. `#[serde(default)]` keeps Sprint 29 index
+    /// Search keyword that found this paper — the paper library
+    /// home groups entries by it. `#[serde(default)]` keeps index
     /// files (no domain key) readable; those entries group under 未分类.
     #[serde(default)]
     pub domain: Option<String>,
@@ -61,7 +61,7 @@ pub fn find_by_url<'a>(index: &'a ImportIndex, url: &str) -> Option<&'a ImportIn
     index.get(url)
 }
 
-/// Remove an entry by url (Sprint 30c: 论文删除是真删除——文件删掉后索引同步移除).
+/// Remove an entry by url (论文删除是真删除——文件删掉后索引同步移除).
 /// Returns true when the entry existed.
 pub fn remove(index: &mut ImportIndex, url: &str) -> bool {
     index.remove(url).is_some()

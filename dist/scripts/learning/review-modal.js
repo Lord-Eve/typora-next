@@ -3,7 +3,7 @@
  * Shows objective quiz questions from review-cards.json, auto-grades,
  * and shows key_points on wrong answers. Falls back to self-rating if no cards.
  *
- * Sprint 4 + PB4: 遗忘曲线复习 + 概念级客观测验
+ * + PB4: 遗忘曲线复习 + 概念级客观测验
  */
 
 (function() {

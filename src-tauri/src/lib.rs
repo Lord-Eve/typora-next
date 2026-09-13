@@ -232,7 +232,7 @@ fn should_request_attention(is_focused: bool) -> bool {
 /// OS (file association / command line) and the app window is not focused.
 /// No-op when the window already has focus.
 ///
-/// Frontend contract (Sprint 7):
+/// Frontend contract:
 ///   - Called only from the `open-file-from-args` listener
 ///   - Called AFTER `addTab` succeeds (so we don't flash on failed open)
 ///   - Fire-and-forget: errors are swallowed to keep the main flow clean
@@ -828,7 +828,7 @@ fn get_app_info(app: tauri::AppHandle) -> AppInfo {
     }
 }
 
-/// 探测更新检查可用的代理 URL（env → Windows 注册表；Sprint 27）
+/// 探测更新检查可用的代理 URL（env → Windows 注册表）
 #[tauri::command]
 fn get_proxy_config() -> Option<String> {
     proxy_config::get_proxy_config()
@@ -1196,7 +1196,7 @@ async fn share_document(
 
 /// Import a local PDF file as a paper Markdown.
 ///
-/// `domain` comes from the DomainPicker shown before import (Sprint 30b) —
+/// `domain` comes from the DomainPicker shown before import —
 /// with a configured papers root the file lands in `{root}/{domain}/{yyyy-MM}/`,
 /// and the import is recorded in the index (keyed `file://<pdf path>`) so
 /// local imports show up in the paper library too.
@@ -1413,7 +1413,7 @@ fn delete_paper_file(md_path: &str) -> Result<bool, String> {
 }
 
 /// Delete a cached paper FOR REAL: remove the .md from disk and the index
-/// entry (Sprint 30c — 课程的删除是软删不删文件，论文必须是真删除).
+/// entry (— 课程的删除是软删不删文件，论文必须是真删除).
 #[tauri::command]
 async fn delete_paper(url: String, app_handle: tauri::AppHandle) -> Result<(), String> {
     let index_path = paper_import::import_index_file(&app_handle)?;
@@ -1470,7 +1470,7 @@ async fn delete_paper_domain(
 }
 
 // ============================================
-// Sprint 31: 导入失败批量 agent 补救
+// 导入失败批量 agent 补救
 // ============================================
 
 /// One failed import, sent by the frontend with the FULL error text
@@ -1496,7 +1496,7 @@ pub struct RescueOutcome {
     pub error: Option<String>,
 }
 
-/// Batch agent rescue for failed paper imports (Sprint 31).
+/// Batch agent rescue for failed paper imports.
 ///
 /// ALL failures go to the agent in ONE call — the agent judges and plans
 /// (systemic 429 → switch source for all; individual no-OA → search by
@@ -2808,7 +2808,7 @@ fn create_learning_project(
 }
 
 // ============================================
-// Sprint N+1: create_project_with_session (Phase B)
+// create_project_with_session (Phase B)
 // Atomically: create project folder + project.json + initialize agent session
 // Returns the agent's session_id (host persists to .learning/agent-session.json)
 // ============================================
@@ -3021,11 +3021,11 @@ async fn persist_quiz_result(
         status_map.insert(chapter_basename.clone(), serde_json::json!("completed"));
     }
 
-    // Sprint 16: 全部章节完成 → 落课程级终态 course_status = "completed"
+    // 全部章节完成 → 落课程级终态 course_status = "completed"
     if course_completion::mark_course_completed_if_done(&mut project) {
         log::info!("[persist_quiz_result] course completed → course_status stamped");
 
-        // Sprint 21: 结课档案 + 全局索引（best-effort，失败不阻塞 quiz 落盘）
+        // 结课档案 + 全局索引（best-effort，失败不阻塞 quiz 落盘）
         if let Some(index_path) = learner_profile::learner_index_path() {
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -3209,7 +3209,7 @@ async fn persist_quiz_result(
     Ok(())
 }
 
-/// Sprint 21: names of completed courses the next plan will reference
+/// names of completed courses the next plan will reference
 /// (create-course dialog hint line). Empty when none.
 #[tauri::command]
 async fn list_learner_courses() -> Result<Vec<String>, String> {
@@ -3218,7 +3218,7 @@ async fn list_learner_courses() -> Result<Vec<String>, String> {
         .unwrap_or_default())
 }
 
-/// Sprint 21 v2: full entries for the memory selection panel (right rail of
+/// full entries for the memory selection panel (right rail of
 /// the create dialog). Newest-first, counts + concept names for search.
 /// Empty when nothing indexed. Read-only — never writes the index.
 #[tauri::command]
@@ -3228,7 +3228,7 @@ async fn list_learner_courses_detail() -> Result<Vec<serde_json::Value>, String>
         .unwrap_or_default())
 }
 
-/// Sprint 21 backfill: for legacy courses completed before cross-course
+/// backfill: for legacy courses completed before cross-course
 /// memory existed. Frontend calls this when its read-side check detects a
 /// completed course; if the profile is missing we generate it and upsert the
 /// global index. Returns true if a profile exists afterwards.
@@ -4113,7 +4113,7 @@ mod explanation_persistence {
 }
 
 // ============================================
-// Sprint 9: Exploration Mode Session Persistence
+// Exploration Mode Session Persistence
 // ============================================
 
 mod exploration_persistence {
@@ -4172,7 +4172,7 @@ async fn delete_exploration_session(
 
 // Commands defined in ai_agent.rs to avoid macro issues
 // ============================================
-// Sprint 4: Forgetting Curve Review System
+// Forgetting Curve Review System
 // ============================================
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -4532,7 +4532,7 @@ async fn postpone_review_item(project_path: String, concept: String) -> Result<(
 }
 
 // ============================================
-// Sprint 4: Knowledge Graph Data
+// Knowledge Graph Data
 // ============================================
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -4703,7 +4703,7 @@ async fn build_knowledge_graph(project_path: String) -> Result<(), String> {
 }
 
 // ============================================
-// Sprint 8: Socratic Review commands
+// Socratic Review commands
 // Pure cluster-selection algorithm + state/session IO + LLM chat
 // PHYSICALLY ISOLATED from quiz-history.json and project.json
 // ============================================
@@ -4943,7 +4943,7 @@ async fn socratic_save_session(
     Ok(file_path.display().to_string())
 }
 
-/// Sprint 17: 案例研习会话落盘（.learning/case-studies/{ts}.json）。
+/// 案例研习会话落盘（.learning/case-studies/{ts}.json）。
 /// session schema 由前端持有（selected_text/chapter_file/session_id/turns/...），
 /// Rust 只做写盘，用 Value 透传。
 #[tauri::command]
@@ -4970,7 +4970,7 @@ async fn case_study_save_session(
     Ok(file_path.display().to_string())
 }
 
-/// Sprint 17: 列出案例研习历史会话（新→旧），供只读回看。
+/// 列出案例研习历史会话（新→旧），供只读回看。
 #[tauri::command]
 async fn case_study_list_sessions(project_path: String) -> Result<Vec<serde_json::Value>, String> {
     let sessions_dir = std::path::PathBuf::from(&project_path)
@@ -5040,7 +5040,7 @@ pub fn run() {
                 window.open_devtools();
             }
 
-            // Sprint 28: NSIS 更新静默删除文件关联注册表（见 file_assoc
+            // NSIS 更新静默删除文件关联注册表（见 file_assoc
             // 模块的文档注释）。自愈只在 release 构建启用，避免 debug 时
             // 双击打开的 .md 关联被重写到 target/debug 下的临时 exe。
             #[cfg(not(debug_assertions))]
