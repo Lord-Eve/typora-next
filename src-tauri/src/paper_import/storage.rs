@@ -101,6 +101,68 @@ pub fn unique_md_path(dir: &Path, stem: &str) -> PathBuf {
     ))
 }
 
+/// Resolve the papers base directory by priority:
+/// 1. `configured_root/<domain>/` — 论文库根目录 + 领域子目录（领域来自搜索关键词）
+/// 2. `project_dir/.learning/papers`
+/// 3. `fallback_base/papers` (app_local_data_dir)
+pub fn choose_papers_dir(
+    configured_root: Option<&str>,
+    domain: Option<&str>,
+    project_dir: Option<&str>,
+    fallback_base: &Path,
+) -> PathBuf {
+    if let Some(root) = configured_root.map(str::trim).filter(|s| !s.is_empty()) {
+        let root = PathBuf::from(root);
+        let sub = domain
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(|d| sanitize_filename(d, 60));
+        return match sub {
+            Some(d) if !d.is_empty() => root.join(d),
+            _ => root,
+        };
+    }
+    if let Some(p) = project_dir {
+        return PathBuf::from(p).join(".learning").join("papers");
+    }
+    fallback_base.join("papers")
+}
+
+/// Where the import index lives: `{fallback_base}/papers/import_index.json`.
+/// The index is global (not per-domain) so 已缓存 marks work across searches.
+pub fn import_index_path(fallback_base: &Path) -> PathBuf {
+    fallback_base.join("papers").join("import_index.json")
+}
+
+/// Extract a title hint from Markdown content: the first ATX heading.
+/// Cleans markdown emphasis markers; returns None when there is no heading.
+pub fn extract_title_hint(content: &str) -> Option<String> {
+    for line in content.lines() {
+        let t = line.trim();
+        let hashes = t.len() - t.trim_start_matches('#').len();
+        if !(1..=6).contains(&hashes) {
+            continue;
+        }
+        let rest = t.get(hashes..).unwrap_or("").trim();
+        if rest.is_empty() {
+            continue;
+        }
+        // ATX 标题要求 # 后跟空白；避免把 Obsidian 行内标签当标题
+        if !t.as_bytes().get(hashes).map_or(false, |b| b.is_ascii_whitespace()) {
+            continue;
+        }
+        let cleaned: String = rest
+            .chars()
+            .filter(|c| !matches!(c, '*' | '`' | '~'))
+            .collect();
+        let cleaned = cleaned.trim().to_string();
+        if !cleaned.is_empty() {
+            return Some(cleaned);
+        }
+    }
+    None
+}
+
 /// Save imported Markdown content to disk.
 ///
 /// Returns the absolute path written.

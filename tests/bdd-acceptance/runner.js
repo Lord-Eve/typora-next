@@ -375,6 +375,16 @@ async function runAcceptanceTests() {
   totalPassed += latexResult.passed;
   totalFailed += latexResult.failed;
 
+  // Sprint 26: 人文课原作试听嵌入（Wikimedia Commons 内联播放器）
+  console.log(`\n${YELLOW}▶ Sprint 26: Humanities media embed (Wikimedia Commons audio)${RESET}`);
+  const mediaSteps = require('./sprint26_media_embed.steps');
+  const mediaResult = await runFeatureFile(
+    path.join(__dirname, '../sprint26/features/sprint26_media_embed.feature'),
+    mediaSteps
+  );
+  totalPassed += mediaResult.passed;
+  totalFailed += mediaResult.failed;
+
   // Sprint 27: 更新进度可见性 + 代理感知（issue #6）
   const updateProgressSteps = require('./sprint27_update_progress.steps');
   const updateProgressResult = await runFeatureFile(
@@ -383,6 +393,66 @@ async function runAcceptanceTests() {
   );
   totalPassed += updateProgressResult.passed;
   totalFailed += updateProgressResult.failed;
+
+  // Sprint 29 PB1: 按领域搜索论文（AnySearch）
+  console.log(`\n${YELLOW}▶ Sprint 29: Paper Search (AnySearch)${RESET}`);
+  const paperSearchSteps = require('./sprint29_paper_search.steps');
+  const paperSearchResult = await runFeatureFile(
+    path.join(__dirname, '../sprint29/features/sprint29_paper_search.feature'),
+    paperSearchSteps
+  );
+  totalPassed += paperSearchResult.passed;
+  totalFailed += paperSearchResult.failed;
+
+  // Sprint 29 PB2: 设置面板分组 + 保存合并（不丢 UI 状态）
+  console.log(`\n${YELLOW}▶ Sprint 29: Settings Panel regroup + save-merge${RESET}`);
+  const settingsPanelSteps = require('./sprint29_settings_panel.steps');
+  const settingsPanelResult = await runFeatureFile(
+    path.join(__dirname, '../sprint29/features/sprint29_settings_panel.feature'),
+    settingsPanelSteps
+  );
+  totalPassed += settingsPanelResult.passed;
+  totalFailed += settingsPanelResult.failed;
+
+  // Sprint 30: 论文库首页 + 缓存交互修复
+  console.log(`\n${YELLOW}▶ Sprint 30: Paper Library home + cache UX${RESET}`);
+  const paperLibrarySteps = require('./sprint30_paper_library.steps');
+  const paperLibraryResult = await runFeatureFile(
+    path.join(__dirname, '../sprint30/features/sprint30_paper_library.feature'),
+    paperLibrarySteps
+  );
+  totalPassed += paperLibraryResult.passed;
+  totalFailed += paperLibraryResult.failed;
+
+  // Sprint 30b: 导入时选择领域
+  console.log(`\n${YELLOW}▶ Sprint 30b: Domain picker at import${RESET}`);
+  const domainPickerSteps = require('./sprint30_domain_picker.steps');
+  const domainPickerResult = await runFeatureFile(
+    path.join(__dirname, '../sprint30/features/sprint30_domain_picker.feature'),
+    domainPickerSteps
+  );
+  totalPassed += domainPickerResult.passed;
+  totalFailed += domainPickerResult.failed;
+
+  // Sprint 30c: 论文库真删除（文件+索引）
+  console.log(`\n${YELLOW}▶ Sprint 30c: Paper library real delete${RESET}`);
+  const paperDeleteSteps = require('./sprint30_paper_delete.steps');
+  const paperDeleteResult = await runFeatureFile(
+    path.join(__dirname, '../sprint30/features/sprint30_paper_delete.feature'),
+    paperDeleteSteps
+  );
+  totalPassed += paperDeleteResult.passed;
+  totalFailed += paperDeleteResult.failed;
+
+  // Sprint 31: 导入失败批量 agent 补救
+  console.log(`\n${YELLOW}▶ Sprint 31: Paper Rescue (batch agent)${RESET}`);
+  const paperRescueSteps = require('./sprint31_paper_rescue.steps');
+  const paperRescueResult = await runFeatureFile(
+    path.join(__dirname, '../sprint31/features/sprint31_paper_rescue.feature'),
+    paperRescueSteps
+  );
+  totalPassed += paperRescueResult.passed;
+  totalFailed += paperRescueResult.failed;
 
   if (sprint10Steps._cleanup) sprint10Steps._cleanup.call({});
   if (paperImportSteps._cleanup) paperImportSteps._cleanup.call({});

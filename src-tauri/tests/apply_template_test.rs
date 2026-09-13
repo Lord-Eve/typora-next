@@ -51,8 +51,7 @@ fn build_template_docx() -> Vec<u8> {
     zip.write_all(styles.as_bytes()).unwrap();
     zip.start_file("word/numbering.xml", opts).unwrap();
     zip.write_all(numbering.as_bytes()).unwrap();
-    zip.finish().unwrap();
-    zip.finish_into_inner().unwrap().into_inner()
+    zip.finish().unwrap().into_inner()
 }
 
 /// Create a small DOCX by feeding markdown to docx-export so we have a real

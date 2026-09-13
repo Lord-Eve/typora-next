@@ -102,6 +102,21 @@ function defaultBehavior({ prompt, cwd }) {
     return { text: 'done' };
   }
 
+  // paper-rescue stage: 批量补救——为每个失败条目写一条 attempt
+  if (prompt.includes('paper-rescue skill') || prompt.includes('paper-rescue 的')) {
+    const outMatch = prompt.match(/写到这个文件（路径原样使用）：\s*\n\s*(\S+)/);
+    const urls = [...prompt.matchAll(/^\d+\.\s*url:\s*(\S+)$/gm)].map((m) => m[1]);
+    if (outMatch) {
+      const attempts = urls.map((url, i) => ({
+        url,
+        candidates: i === 0 ? ['https://mock-oa.example/rescued.pdf'] : [],
+        notes: i === 0 ? 'OpenAlex 换源命中' : '无救：期刊闭源，无开放获取版本'
+      }));
+      write(outMatch[1], JSON.stringify({ attempts }, null, 2));
+    }
+    return { text: `补救完成：${Math.min(urls.length, 1)} 篇有候选 / ${Math.max(urls.length - 1, 0)} 篇无救` };
+  }
+
   // review-gen stages
   if (prompt.includes('review-generation skill')) {
     return { text: '```json\n{"cards":{}}\n```' };

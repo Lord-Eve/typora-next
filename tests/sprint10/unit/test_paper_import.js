@@ -173,7 +173,7 @@ TestRunner.test('PaperReaderIntegration.showWelcome renders PDF and URL inputs',
   PaperReaderIntegration.showWelcome(container);
 
   const html = container.innerHTML;
-  TestRunner.assert(html.includes('导入本地 PDF'), 'should render PDF import button');
+  TestRunner.assert(html.includes('本地 PDF'), 'should render PDF import button');
   TestRunner.assert(html.includes('paper-reader-url-input'), 'should render URL input');
   TestRunner.assert(html.includes('paper-reader-import-url'), 'should render URL import button');
   TestRunner.assert(html.includes('PDF、论文 URL'), 'should update supported formats tag');

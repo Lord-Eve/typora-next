@@ -34,7 +34,11 @@ impl ImportStatus {
 }
 
 pub mod arxiv;
+pub mod index;
 pub mod mineru;
+pub mod rescue;
+pub mod resolve;
+pub mod search;
 pub mod storage;
 
 /// Build a human-readable error from a minerU-style message.
@@ -48,22 +52,40 @@ pub fn user_facing_error(context: &str, detail: Option<&str>) -> String {
 /// Resolve where imported papers should live.
 ///
 /// Priority:
-/// 1. `project_dir/.learning/papers/{yyyy-MM}/`
-/// 2. app_local_data_dir/papers/{yyyy-MM}/
+/// 1. settings 论文库根目录 + `domain` 子目录（领域来自搜索关键词）
+/// 2. `project_dir/.learning/papers/{yyyy-MM}/`
+/// 3. app_local_data_dir/papers/{yyyy-MM}/
 pub fn resolve_papers_dir(
     app_handle: &tauri::AppHandle,
     project_dir: Option<&str>,
+    domain: Option<&str>,
 ) -> Result<PathBuf, String> {
-    if let Some(dir) = project_dir {
-        let path = PathBuf::from(dir).join(".learning").join("papers");
-        return Ok(path);
-    }
+    let configured = crate::get_config(app_handle.clone())
+        .ok()
+        .and_then(|c| c.papers_root)
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
 
+    let fallback = app_handle
+        .path()
+        .app_local_data_dir()
+        .map_err(|e| format!("Failed to get app local data dir: {}", e))?;
+    Ok(storage::choose_papers_dir(
+        configured.as_deref(),
+        domain,
+        project_dir,
+        &fallback,
+    ))
+}
+
+/// Global import index path (not per-domain): 已缓存 marks must work
+/// no matter which domain subdirectory a paper landed in.
+pub fn import_index_file(app_handle: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
     let base = app_handle
         .path()
         .app_local_data_dir()
         .map_err(|e| format!("Failed to get app local data dir: {}", e))?;
-    Ok(base.join("papers"))
+    Ok(storage::import_index_path(&base))
 }
 
 #[cfg(test)]
