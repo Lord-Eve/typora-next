@@ -251,94 +251,10 @@
         <h2>设置</h2>
         <button class="modal-close" id="settingsModalClose">&times;</button>
       </div>
-      <div class="modal-body">
-        <div class="setting-item">
-          <label class="setting-label" for="settingAiProvider">API 格式</label>
-          <select id="settingAiProvider" class="setting-select">
-            <option value="anthropic">Anthropic Messages</option>
-            <option value="openai">OpenAI Chat Completions</option>
-          </select>
-        </div>
-        <div class="setting-item">
-          <label class="setting-label" for="settingAiBaseUrl">Base URL</label>
-          <input type="text" id="settingAiBaseUrl" class="setting-input" placeholder="https://api.anthropic.com">
-          <span class="setting-hint">留空使用默认地址，可填入第三方兼容服务地址</span>
-        </div>
-        <div class="setting-item">
-          <label class="setting-label" for="settingModel">模型名称</label>
-          <input type="text" id="settingModel" class="setting-input" placeholder="claude-3-5-haiku-20241022">
-          <span class="setting-hint">留空使用默认模型</span>
-        </div>
-        <div class="setting-item">
-          <label class="setting-label" for="settingApiKey">API Key</label>
-          <input type="password" id="settingApiKey" class="setting-input" placeholder="sk-...">
-          <span class="setting-hint">用于 AI 修复 Mermaid 图表</span>
-        </div>
-        <div class="setting-item">
-          <label class="setting-label" for="settingMineruToken">minerU API Token</label>
-          <input type="password" id="settingMineruToken" class="setting-input" placeholder="在 mineru.net API 管理页面创建">
-          <span class="setting-hint">用于 PDF / URL 论文导入</span>
-        </div>
-        <div class="setting-item">
-          <label class="setting-label" for="settingMineruBaseUrl">minerU Base URL</label>
-          <input type="text" id="settingMineruBaseUrl" class="setting-input" placeholder="https://mineru.net">
-          <span class="setting-hint">留空使用 https://mineru.net</span>
-        </div>
-        <div class="setting-item">
-          <label class="setting-label" for="settingMineruModel">minerU 模型版本</label>
-          <select id="settingMineruModel" class="setting-select">
-            <option value="vlm" selected>vlm（推荐，复杂版式）</option>
-            <option value="pipeline">pipeline（标准解析）</option>
-          </select>
-          <span class="setting-hint">选择解析模型版本</span>
-        </div>
-        <div class="setting-item">
-          <label class="setting-label"></label>
-          <button class="modal-btn modal-btn-secondary" id="settingsTest" type="button">测试连接</button>
-          <span class="setting-hint" id="testResult"></span>
-        </div>
-        <div class="setting-item">
-          <label class="setting-label" for="settingTheme">主题</label>
-          <select id="settingTheme" class="setting-select">
-            <option value="">跟随系统</option>
-            <option value="light">浅色</option>
-            <option value="dark">深色</option>
-          </select>
-        </div>
-        <div class="setting-item">
-          <label class="setting-label" for="settingCustomCursor">鼠标光标</label>
-          <select id="settingCustomCursor" class="setting-select">
-            <option value="">系统默认</option>
-            <option value="pencil">铅笔</option>
-            <option value="highlighter">荧光笔</option>
-            <option value="pen">圆珠笔</option>
-            <option value="cat">猫咪</option>
-            <option value="microphone">麦克风</option>
-            <option value="rocket">火箭</option>
-            <option value="wand">魔法棒</option>
-          </select>
-          <span class="setting-hint">选择自定义鼠标指针样式</span>
-        </div>
-        <div class="setting-item">
-          <label class="setting-label">新手指引</label>
-          <button class="modal-btn modal-btn-secondary" id="restartOnboardingBtn" type="button">重新显示引导</button>
-          <span class="setting-hint">再次显示工具栏功能介绍</span>
-        </div>
-	        <div class="setting-item">
-	          <label class="setting-label" for="settingWordTemplate">Word 导出模板</label>
-	          <input type="checkbox" id="settingWordTemplate" class="setting-checkbox">
-	          <span class="setting-hint">启用后每次导出 Word 时可选择模板 .docx 文件控制输出样式</span>
-	        </div>
-	        <div class="settings-about-link">
-	          <span id="settingsAboutBtn" class="about-link-text">关于 Typora Next</span>
-	        </div>
-	      </div>
-	      <div class="modal-footer">
-	        <button class="modal-btn modal-btn-secondary" id="settingsCancel">取消</button>
-	        <button class="modal-btn modal-btn-primary" id="settingsSave">保存</button>
-	      </div>
-	    </div>
-	  </div>
+      <!-- Sprint 29: 表单由 settings-panel.js 动态渲染为分组 tab（AI / 论文服务 / 外观 / 通用） -->
+      <div class="modal-body" id="settingsBody"></div>
+    </div>
+  </div>
 
 	  <!-- About Modal -->
   <div class="modal-overlay" id="aboutModal" style="display: none;">
@@ -579,6 +495,13 @@
   <script src="scripts/learning/paper-reader.js"></script>
   <script src="scripts/learning/paper-reader-integration.js"></script>
   <script src="scripts/learning/paper-import.js"></script>
+  <!-- Sprint 29: 论文搜索（AnySearch）+ 设置面板分组模块 -->
+  <script src="scripts/learning/paper-search.js"></script>
+  <!-- Sprint 30: 论文库首页（按领域分组的已缓存论文） -->
+  <script src="scripts/learning/paper-library.js"></script>
+  <!-- Sprint 30b: 导入前领域选择 -->
+  <script src="scripts/learning/domain-picker.js"></script>
+  <script src="scripts/settings-panel.js"></script>
   <script src="scripts/onboarding.js"></script>
   <script src="scripts/update-progress.js"></script>
   <script src="scripts/updater.js"></script>
