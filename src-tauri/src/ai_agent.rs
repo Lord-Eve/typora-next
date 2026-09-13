@@ -117,7 +117,7 @@ pub(crate) fn _agent_log_dir(app_handle: &AppHandle) -> std::path::PathBuf {
 }
 
 /// Build the path to agent-bridge.mjs
-fn get_agent_bridge_path() -> Result<std::path::PathBuf, String> {
+pub(crate) fn get_agent_bridge_path() -> Result<std::path::PathBuf, String> {
     // Helper: build a candidate path relative to exe directory
     let exe_parent = |sub: &str| {
         std::env::current_exe()
@@ -1575,7 +1575,7 @@ pub async fn probe_agent_sdk() -> Result<serde_json::Value, String> {
 /// ESM resolution ignores NODE_PATH, so on MSI installs (no node_modules next
 /// to the bridge) the entry is resolved here and passed via env for the
 /// bridge to import by absolute path.
-fn apply_agent_sdk_entry(cmd: &mut std::process::Command, bridge_path: &std::path::Path) {
+pub(crate) fn apply_agent_sdk_entry(cmd: &mut std::process::Command, bridge_path: &std::path::Path) {
     if let Some(entry) = resolve_agent_sdk_entry(bridge_path) {
         cmd.env("TYPORA_PI_SDK_ENTRY", entry.to_string_lossy().to_string());
     }
