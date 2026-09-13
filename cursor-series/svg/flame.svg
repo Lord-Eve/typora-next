@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <!-- 精修光标系列：火焰（flame）。三层火舌（外焰 / 内焰 / 焰心）+ 侧缘红光。锚点 = 火苗顶端 (16,3) -->
+  <defs>
+    <linearGradient id="flOuter" gradientUnits="userSpaceOnUse" x1="10" y1="27" x2="22" y2="4">
+      <stop offset="0" stop-color="#b91c1c"/>
+      <stop offset="0.34" stop-color="#ea580c"/>
+      <stop offset="0.7" stop-color="#f97316"/>
+      <stop offset="1" stop-color="#fb923c"/>
+    </linearGradient>
+    <linearGradient id="flInner" gradientUnits="userSpaceOnUse" x1="13" y1="25" x2="19" y2="11">
+      <stop offset="0" stop-color="#f59e0b"/>
+      <stop offset="0.5" stop-color="#fbbf24"/>
+      <stop offset="1" stop-color="#fde68a"/>
+    </linearGradient>
+  </defs>
+
+  <!-- ═══ 并集形状：整体压线（只留外缘）→ 再逐面填充 ═══ -->
+  <g class="ink-outline">
+    <path d="M16 2.5 C18.5 7.5 23.5 11 24.5 17.5 C25.3 23.5 21.5 29 16 29 C10.5 29 6.5 24 6.9 18.0 C7.3 13.5 9.5 12.5 10.8 11.6 C11.4 14.9 12.9 16.3 14.6 16.6 C14.5 12.5 15.0 7.5 16 2.5 Z" fill="#1a1a2e" stroke="#1a1a2e" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+  <g class="ink-fill">
+    <path d="M16 2.5 C18.5 7.5 23.5 11 24.5 17.5 C25.3 23.5 21.5 29 16 29 C10.5 29 6.5 24 6.9 18.0 C7.3 13.5 9.5 12.5 10.8 11.6 C11.4 14.9 12.9 16.3 14.6 16.6 C14.5 12.5 15.0 7.5 16 2.5 Z" fill="url(#flOuter)"/>
+  </g>
+
+  <!-- ═══ 分面 / 材质 ═══ -->
+  <path d="M16 11.5 C18 14.5 20.5 16.5 20.5 20.5 C20.5 24 18.5 26.5 16 26.5 C13.5 26.5 11.5 24 11.5 20.5 C11.5 16.5 14 14.5 16 11.5 Z" fill="url(#flInner)"/>
+  <path d="M16 17 C17 18.6 18.4 19.6 18.4 21.6 C18.4 23.4 17.4 24.8 16 24.8 C14.6 24.8 13.6 23.4 13.6 21.6 C13.6 19.6 15 18.6 16 17 Z" opacity="0.9" fill="#fffbeb"/>
+  <circle cx="25.2" cy="7.6" r="0.85" opacity="0.9" fill="#fbbf24"/>
+
+  <!-- ═══ 高光 / 缝隙 / 环境光遮蔽 ═══ -->
+  <path d="M9.9 14.6 C8.3 17.3 8.2 20.6 9.3 23.4" stroke="#7f1d1d" stroke-width="0.7" opacity="0.55" fill="none"/>
+  <path d="M21.5 12.6 C23.2 15.2 24.0 18.2 23.6 21.4" stroke="#fdba74" stroke-width="0.7" opacity="0.6" fill="none"/>
+  <path d="M11.6 12.6 C12.4 15.0 13.4 16.0 14.5 16.4" stroke="#9a3412" stroke-width="0.6" opacity="0.55" fill="none"/>
+  <path d="M16.4 5.6 C17.4 8.6 18.8 10.6 20.2 12.4" stroke="#fef3c7" stroke-width="0.5" opacity="0.5" fill="none"/>
+</svg>

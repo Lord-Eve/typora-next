@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <!-- 精修光标系列：直尺（ruler）。半透明琥珀尺身 + 长短刻度 + 起点零刻度。锚点 = 尺端左角 (3,20) -->
+  <defs>
+    <linearGradient id="ruBody" gradientUnits="userSpaceOnUse" x1="3" y1="20" x2="28" y2="8">
+      <stop offset="0" stop-color="#fffbeb"/>
+      <stop offset="0.34" stop-color="#fef3c7"/>
+      <stop offset="0.68" stop-color="#fde68a"/>
+      <stop offset="1" stop-color="#fbbf24"/>
+    </linearGradient>
+  </defs>
+
+  <!-- ═══ 并集形状：整体压线（只留外缘）→ 再逐面填充 ═══ -->
+  <g class="ink-outline">
+    <path d="M2.6 19.58 L26.6 5.58 L29.4 10.42 L5.4 24.42 Z" fill="#1a1a2e" stroke="#1a1a2e" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+  <g class="ink-fill">
+    <path d="M2.6 19.58 L26.6 5.58 L29.4 10.42 L5.4 24.42 Z" fill="url(#ruBody)"/>
+  </g>
+
+  <!-- ═══ 高光 / 缝隙 / 环境光遮蔽 ═══ -->
+  <path d="M2.95 20.19 L26.95 6.19" stroke="#fffbeb" stroke-width="0.7" opacity="0.85" fill="none"/>
+  <path d="M5.1 23.90 L29.1 9.90" stroke="#b45309" stroke-width="0.8" opacity="0.5" fill="none"/>
+  <path d="M2.6 19.58 L5.4 24.42" stroke="#fff7ed" stroke-width="0.7" opacity="0.7" fill="none"/>
+  <path d="M29.4 10.42 L26.6 5.58" stroke="#92400e" stroke-width="0.7" opacity="0.6" fill="none"/>
+  <path d="M4.04 18.74 L6.84 23.59" stroke="#1a1a2e" stroke-width="0.75" opacity="0.85" fill="none"/>
+  <path d="M5.00 18.18 L6.70 21.12" stroke="#1a1a2e" stroke-width="0.6" opacity="0.8" fill="none"/>
+  <path d="M8.12 16.36 L9.07 18.01" stroke="#1a1a2e" stroke-width="0.55" opacity="0.7" fill="none"/>
+  <path d="M11.24 14.54 L12.94 17.48" stroke="#1a1a2e" stroke-width="0.6" opacity="0.8" fill="none"/>
+  <path d="M14.36 12.72 L15.31 14.37" stroke="#1a1a2e" stroke-width="0.55" opacity="0.7" fill="none"/>
+  <path d="M17.48 10.90 L19.18 13.84" stroke="#1a1a2e" stroke-width="0.6" opacity="0.8" fill="none"/>
+  <path d="M20.60 9.08 L21.55 10.73" stroke="#1a1a2e" stroke-width="0.55" opacity="0.7" fill="none"/>
+</svg>

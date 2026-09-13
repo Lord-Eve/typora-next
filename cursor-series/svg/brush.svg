@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <!-- 精修光标系列：板刷（brush）。刷毛成束 + 金属箍反射 + 木杆棱面高光。锚点 = 刷毛尖端 (4,4) -->
+  <defs>
+    <linearGradient id="pbBristle" gradientUnits="userSpaceOnUse" x1="4" y1="4" x2="15" y2="15">
+      <stop offset="0" stop-color="#7dd3fc"/>
+      <stop offset="0.32" stop-color="#38bdf8"/>
+      <stop offset="0.72" stop-color="#0ea5e9"/>
+      <stop offset="1" stop-color="#075985"/>
+    </linearGradient>
+    <linearGradient id="pbFerrule" gradientUnits="userSpaceOnUse" x1="9.6" y1="14.8" x2="16.6" y2="11.5">
+      <stop offset="0" stop-color="#475569"/>
+      <stop offset="0.16" stop-color="#94a3b8"/>
+      <stop offset="0.36" stop-color="#f8fafc"/>
+      <stop offset="0.54" stop-color="#cbd5e1"/>
+      <stop offset="0.72" stop-color="#64748b"/>
+      <stop offset="0.9" stop-color="#e2e8f0"/>
+      <stop offset="1" stop-color="#334155"/>
+    </linearGradient>
+    <linearGradient id="pbWood" gradientUnits="userSpaceOnUse" x1="11.6" y1="11.6" x2="28.4" y2="28.4">
+      <stop offset="0" stop-color="#c2410c"/>
+      <stop offset="0.28" stop-color="#f97316"/>
+      <stop offset="0.58" stop-color="#fdba74"/>
+      <stop offset="0.82" stop-color="#ea580c"/>
+      <stop offset="1" stop-color="#7c2d12"/>
+    </linearGradient>
+  </defs>
+
+  <!-- ═══ 并集形状：整体压线（只留外缘）→ 再逐面填充 ═══ -->
+  <g class="ink-outline">
+    <path d="M5.11 3.69 L15.17 9.23 L9.23 15.17 L3.69 5.11 Z" fill="#1a1a2e" stroke="#1a1a2e" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M14.75 9.65 L16.59 11.49 L11.49 16.59 L9.65 14.75 Z" fill="#1a1a2e" stroke="#1a1a2e" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M16.44 11.64 L28.34 24.66 L24.66 28.34 L11.64 16.44 Z" fill="#1a1a2e" stroke="#1a1a2e" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+  <g class="ink-fill">
+    <path d="M5.11 3.69 L15.17 9.23 L9.23 15.17 L3.69 5.11 Z" fill="url(#pbBristle)"/>
+    <path d="M14.75 9.65 L16.59 11.49 L11.49 16.59 L9.65 14.75 Z" fill="url(#pbFerrule)"/>
+    <path d="M16.44 11.64 L28.34 24.66 L24.66 28.34 L11.64 16.44 Z" fill="url(#pbWood)"/>
+  </g>
+
+  <!-- ═══ 分面 / 材质 ═══ -->
+  <path d="M5.8 3.4 L7.8 5.4 L5.4 7.8 L3.4 5.8 Z" opacity="0.55" fill="#e0f2fe"/>
+
+  <!-- ═══ 高光 / 缝隙 / 环境光遮蔽 ═══ -->
+  <path d="M13.6 10.8 L5.0 3.8" stroke="#075985" stroke-width="0.5" opacity="0.5" fill="none"/>
+  <path d="M12.2 12.2 L4.4 4.4" stroke="#075985" stroke-width="0.5" opacity="0.5" fill="none"/>
+  <path d="M10.8 13.6 L3.8 5.0" stroke="#075985" stroke-width="0.5" opacity="0.5" fill="none"/>
+  <path d="M14.75 9.65 L9.65 14.75" stroke="#f8fafc" stroke-width="0.6" opacity="0.8" fill="none"/>
+  <path d="M16.59 11.49 L11.49 16.59" stroke="#334155" stroke-width="0.5" opacity="0.7" fill="none"/>
+  <path d="M16.8 12.0 L28.0 24.2" stroke="#fed7aa" stroke-width="0.6" opacity="0.6" fill="none"/>
+  <path d="M14.9 13.2 L27.3 25.7" stroke="#7c2d12" stroke-width="0.4" opacity="0.45" fill="none"/>
+  <path d="M13.2 14.9 L25.7 27.3" stroke="#7c2d12" stroke-width="0.4" opacity="0.45" fill="none"/>
+</svg>

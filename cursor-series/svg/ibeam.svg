@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <!-- 精修光标系列：文本 I 形（ibeam）。银白工字杆 + 中轴高光与暗边。锚点 = 竖杆顶端 (16,4) -->
+  <defs>
+    <linearGradient id="ibMetal" gradientUnits="userSpaceOnUse" x1="8" y1="3" x2="24" y2="29">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.3" stop-color="#e6edf5"/>
+      <stop offset="0.62" stop-color="#a9b9cb"/>
+      <stop offset="1" stop-color="#6f8098"/>
+    </linearGradient>
+  </defs>
+
+  <!-- ═══ 并集形状：整体压线（只留外缘）→ 再逐面填充 ═══ -->
+  <g class="ink-outline">
+    <path d="M8.6 3.6 h14.8 v2.8 h-4.4 v19.2 h4.4 v2.8 h-14.8 v-2.8 h4.4 v-19.2 h-4.4 z" fill="#1a1a2e" stroke="#1a1a2e" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+  <g class="ink-fill">
+    <path d="M8.6 3.6 h14.8 v2.8 h-4.4 v19.2 h4.4 v2.8 h-14.8 v-2.8 h4.4 v-19.2 h-4.4 z" fill="url(#ibMetal)"/>
+  </g>
+
+  <!-- ═══ 高光 / 缝隙 / 环境光遮蔽 ═══ -->
+  <path d="M13.6 7.0 v18.4" stroke="#ffffff" stroke-width="0.8" opacity="0.7" fill="none"/>
+  <path d="M18.4 7.0 v18.4" stroke="#4a5a70" stroke-width="0.7" opacity="0.5" fill="none"/>
+  <path d="M8.9 6.4 h14.2" stroke="#475569" stroke-width="0.5" opacity="0.45" fill="none"/>
+  <path d="M8.9 25.6 h14.2" stroke="#475569" stroke-width="0.5" opacity="0.45" fill="none"/>
+</svg>

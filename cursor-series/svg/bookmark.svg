@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <!-- 精修光标系列：书签（bookmark）。祖母绿缎面 + 暗色顶箍 + 烫金菱形徽记。锚点 = 缎带左上角 (12,3) -->
+  <defs>
+    <linearGradient id="bmBody" gradientUnits="userSpaceOnUse" x1="11.5" y1="3.2" x2="20.5" y2="27">
+      <stop offset="0" stop-color="#6ee7b7"/>
+      <stop offset="0.3" stop-color="#34d399"/>
+      <stop offset="0.68" stop-color="#10b981"/>
+      <stop offset="1" stop-color="#047857"/>
+    </linearGradient>
+    <linearGradient id="bmGold" gradientUnits="userSpaceOnUse" x1="14.1" y1="11.6" x2="17.9" y2="15.4">
+      <stop offset="0" stop-color="#fef9c3"/>
+      <stop offset="0.45" stop-color="#fbbf24"/>
+      <stop offset="1" stop-color="#b45309"/>
+    </linearGradient>
+  </defs>
+
+  <!-- ═══ 并集形状：整体压线（只留外缘）→ 再逐面填充 ═══ -->
+  <g class="ink-outline">
+    <path d="M13.4 3.2 h5.2 a1.9 1.9 0 0 1 1.9 1.9 v21.9 l-4.5 -5.6 l-4.5 5.6 v-21.9 a1.9 1.9 0 0 1 1.9 -1.9 z" fill="#1a1a2e" stroke="#1a1a2e" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+  <g class="ink-fill">
+    <path d="M13.4 3.2 h5.2 a1.9 1.9 0 0 1 1.9 1.9 v21.9 l-4.5 -5.6 l-4.5 5.6 v-21.9 a1.9 1.9 0 0 1 1.9 -1.9 z" fill="url(#bmBody)"/>
+  </g>
+
+  <!-- ═══ 分面 / 材质 ═══ -->
+  <path d="M11.5 6.7 v-1.6 a1.9 1.9 0 0 1 1.9 -1.9 h5.2 a1.9 1.9 0 0 1 1.9 1.9 v1.6 z" fill="#065f46"/>
+  <path d="M16 11.6 L17.9 13.5 L16 15.4 L14.1 13.5 Z" fill="url(#bmGold)"/>
+
+  <!-- ═══ 高光 / 缝隙 / 环境光遮蔽 ═══ -->
+  <path d="M11.5 7.9 h9" stroke="#a7f3d0" stroke-width="0.5" opacity="0.75" stroke-dasharray="1 1" fill="none"/>
+  <path d="M11.5 6.7 h9" stroke="#022c22" stroke-width="0.6" opacity="0.5" fill="none"/>
+  <path d="M12.4 8.6 v16.4" stroke="#a7f3d0" stroke-width="0.7" opacity="0.5" fill="none"/>
+  <path d="M19.6 8.6 v16.2" stroke="#064e3b" stroke-width="0.7" opacity="0.6" fill="none"/>
+  <path d="M12.6 26.2 L16 21.9 L19.4 26.2" stroke="#a7f3d0" stroke-width="0.6" opacity="0.5" fill="none"/>
+  <path d="M14.7 12.3 L16.6 14.2" stroke="#fffbeb" stroke-width="0.5" opacity="0.8" fill="none"/>
+</svg>
