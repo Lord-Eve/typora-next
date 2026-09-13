@@ -52,3 +52,20 @@ fn test_copy_bundled_skills_to_project_copies_top_level_skill_md() {
     );
     let _ = std::fs::remove_dir_all(&dst);
 }
+
+/// Sprint 26: wikimedia-commons skill 的 scripts/wiki-fetch.mjs 必须随递归拷贝
+/// 进项目（agent 执行的是项目内副本），且整个 skill 目录一并就位。
+#[test]
+fn test_copy_bundled_skills_copies_wiki_fetch_script() {
+    let dst = std::env::temp_dir().join(format!("skills-copy-wiki-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dst);
+    let project_path = dst.to_string_lossy().to_string();
+    copy_bundled_skills_to_project(&project_path).expect("copy should succeed");
+    let base = dst.join(".pi").join("skills").join("wikimedia-commons");
+    assert!(base.join("SKILL.md").exists(), "wikimedia-commons SKILL.md");
+    assert!(
+        base.join("scripts").join("wiki-fetch.mjs").exists(),
+        "scripts/wiki-fetch.mjs must reach the project"
+    );
+    let _ = std::fs::remove_dir_all(&dst);
+}

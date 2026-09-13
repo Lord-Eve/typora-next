@@ -159,6 +159,110 @@ export function _writeTempModelsJson(config) {
   return { dir, modelsPath, providerId, modelId };
 }
 
+// ============================================
+// Sprint 26: wikimedia-commons skill 受限 bash 执行器
+// 能力住在 skill 里（SKILL.md + scripts/wiki-fetch.mjs），bridge 只提供
+// 一把「锁死的钥匙」：自定义 BashOperations 只放行 wiki-fetch.mjs 调用。
+// ============================================
+
+const WIKI_FETCH_SCRIPT_SUFFIX = /wikimedia-commons[\\/]scripts[\\/]wiki-fetch\.mjs$/;
+const WIKI_FETCH_HOSTS = ['commons.wikimedia.org', 'upload.wikimedia.org'];
+// 整条命令必须精确为 `node <脚本路径> <https-url>`（引号可选）——
+// ^$ 锚定使任何拼接（&& ; | > 反引号 $(…)）都直接失配。
+const WIKI_FETCH_CMD_RE = /^node\s+"?([^"\s]+)"?\s+"?(https:\/\/[^\s"]+)"?\s*$/;
+
+export function isWikiFetchCommand(command) {
+  if (typeof command !== 'string' || !command.trim()) return false;
+  const m = command.trim().match(WIKI_FETCH_CMD_RE);
+  if (!m) return false;
+  if (!WIKI_FETCH_SCRIPT_SUFFIX.test(m[1])) return false;
+  try {
+    return WIKI_FETCH_HOSTS.includes(new URL(m[2]).hostname);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 构建受限 bash 工具（pi ≥ 0.84 createBashToolDefinition；旧版返回 null 跳过）。
+ * exec 不经 shell，直接 execFile spawn node——命令拼接注入在 OS 层也不成立。
+ */
+function buildWikiFetchBashTool(pi, cwd) {
+  if (typeof pi.createBashToolDefinition !== 'function') return null;
+  return pi.createBashToolDefinition(cwd, {
+    operations: {
+      async exec(command, _cwd, { onData }) {
+        const m = typeof command === 'string' ? command.trim().match(WIKI_FETCH_CMD_RE) : null;
+        if (!m || !isWikiFetchCommand(command)) {
+          onData(Buffer.from('rejected: this shell only runs the wikimedia-commons skill script (node .../wikimedia-commons/scripts/wiki-fetch.mjs "<https-url>")\n'));
+          return { exitCode: 1 };
+        }
+        const { execFile } = await import('node:child_process');
+        return await new Promise((resolve) => {
+          // process.execPath = 当前 bridge 自己的 node 二进制，不依赖 PATH
+          execFile(process.execPath, [m[1], m[2]], { timeout: 30000, maxBuffer: 64 * 1024 }, (err, stdout, stderr) => {
+            if (stdout) onData(Buffer.from(stdout));
+            if (stderr) onData(Buffer.from(stderr));
+            if (err && !stdout) onData(Buffer.from(String(err.message || err)));
+            resolve({ exitCode: err ? (typeof err.code === 'number' ? err.code : 1) : 0 });
+          });
+        });
+      },
+    },
+  });
+}
+
+// ============================================
+// Sprint 31: paper-rescue skill 受限 bash 执行器
+// 同 wiki-fetch 模式：自定义 BashOperations 只放行 paper-rescue/scripts 下
+// 两个固定端点脚本（openalex-lookup / anysearch-lookup）。
+// AnySearch key 通过环境变量注入子进程（不进 argv / 日志）。
+// ============================================
+
+const PAPER_RESCUE_SCRIPT_RE = /paper-rescue[\\/]scripts[\\/](openalex-lookup|anysearch-lookup)\.mjs$/;
+// 整条命令必须精确为 `node <脚本路径> "<参数>"`——^$ 锚定使任何拼接直接失配。
+const PAPER_RESCUE_CMD_RE = /^node\s+"?([^"\s]+)"?\s+"([^"]+)"\s*$/;
+
+export function isPaperRescueCommand(command) {
+  if (typeof command !== 'string' || !command.trim()) return false;
+  const m = command.trim().match(PAPER_RESCUE_CMD_RE);
+  if (!m) return false;
+  return PAPER_RESCUE_SCRIPT_RE.test(m[1]);
+}
+
+/**
+ * 构建 paper-rescue 受限 bash 工具。anysearchKey 仅在运行 anysearch-lookup.mjs
+ * 时以 TYPORA_ANYSEARCH_KEY 注入子进程 env；openalex-lookup 不需要 key。
+ */
+function buildPaperRescueBashTool(pi, cwd, anysearchKey) {
+  if (typeof pi.createBashToolDefinition !== 'function') return null;
+  return pi.createBashToolDefinition(cwd, {
+    operations: {
+      async exec(command, _cwd, { onData }) {
+        const m = typeof command === 'string' ? command.trim().match(PAPER_RESCUE_CMD_RE) : null;
+        if (!m || !isPaperRescueCommand(command)) {
+          onData(Buffer.from('rejected: this shell only runs the paper-rescue skill scripts (node .../paper-rescue/scripts/(openalex-lookup|anysearch-lookup).mjs "<arg>")\n'));
+          return { exitCode: 1 };
+        }
+        const scriptPath = m[1];
+        const isAnysearch = /anysearch-lookup\.mjs$/.test(scriptPath);
+        const env = isAnysearch && anysearchKey
+          ? { ...process.env, TYPORA_ANYSEARCH_KEY: anysearchKey }
+          : process.env;
+        const { execFile } = await import('node:child_process');
+        return await new Promise((resolve) => {
+          execFile(process.execPath, [scriptPath, m[2]], { timeout: 30000, maxBuffer: 64 * 1024, env }, (err, stdout, stderr) => {
+            if (stdout) onData(Buffer.from(stdout));
+            if (stderr) onData(Buffer.from(stderr));
+            if (err && !stdout) onData(Buffer.from(String(err.message || err)));
+            resolve({ exitCode: err ? (typeof err.code === 'number' ? err.code : 1) : 0 });
+          });
+        });
+      },
+    },
+  });
+}
+
 /**
  * Run one agent turn on the pi kernel and collect the output.
  *
@@ -169,6 +273,12 @@ export function _writeTempModelsJson(config) {
  * @param {string[]} [opts.tools] - tool allowlist; [] = no tools
  * @param {string|null} [opts.sessionId] - pi session FILE path to resume (if any)
  * @param {Function} [opts.onToolLog] - (text) => void for progress_log lines
+ * @param {boolean} [opts.wikiFetch] - inject the wikimedia-commons sandboxed bash
+ *        tool (Sprint 26): a bash whose custom BashOperations only runs the
+ *        skill's wiki-fetch.mjs script; every other command is rejected.
+ * @param {object} [opts.paperRescue] - inject the paper-rescue sandboxed bash
+ *        (Sprint 31): only runs paper-rescue/scripts lookup scripts;
+ *        { anysearchKey } is passed to anysearch-lookup.mjs via env only.
  * @returns {Promise<{output: string, sessionFile: string|null, refreshed: boolean}>}
  */
 export async function runPiTurn(opts) {
@@ -182,8 +292,31 @@ export async function runPiTurn(opts) {
 
 async function _runPiTurnReal(opts) {
   const pi = await loadPiSDK();
-  const { prompt, config, cwd, tools, sessionId, onToolLog } = opts;
+  const { prompt, config, cwd, tools, sessionId, onToolLog, wikiFetch, paperRescue } = opts;
   const workDir = cwd || process.cwd();
+
+  // Sprint 26: wikiFetch 模式注入受限 bash（customTools）+ 名字放行
+  const customTools = [];
+  let toolNames = tools || [];
+  if (wikiFetch) {
+    const t = buildWikiFetchBashTool(pi, workDir);
+    if (t) {
+      customTools.push(t);
+      toolNames = [...toolNames, 'bash'];
+    } else {
+      log('warn', 'wiki-fetch bash tool unavailable: pi.createBashToolDefinition missing (old SDK?)');
+    }
+  }
+  // Sprint 31: paperRescue 模式注入受限 bash（两脚本固定端点查询）
+  if (paperRescue) {
+    const t = buildPaperRescueBashTool(pi, workDir, paperRescue.anysearchKey || '');
+    if (t) {
+      customTools.push(t);
+      if (!toolNames.includes('bash')) toolNames = [...toolNames, 'bash'];
+    } else {
+      log('warn', 'paper-rescue bash tool unavailable: pi.createBashToolDefinition missing (old SDK?)');
+    }
+  }
 
   const tmp = _writeTempModelsJson(config);
   let session = null;
@@ -240,7 +373,8 @@ async function _runPiTurnReal(opts) {
       ...(modelRuntime ? { modelRuntime } : { authStorage, modelRegistry }),
       resourceLoader: loader,
       sessionManager,
-      tools: tools || [],
+      tools: toolNames,
+      ...(customTools.length ? { customTools } : {}),
     }));
 
     // Collect streaming text deltas + tool activity for progress_log
@@ -521,12 +655,16 @@ export async function generateChapters(queryFnUnused, config, args) {
       });
 
     try {
+      // Sprint 26: humanities/hybrid 章节生成注入 wikimedia-commons 受限 bash
+      // （skill 内置 wiki-fetch.mjs 白名单脚本，agent 可为作品实例配试听直链）
+      const wikiFetchEnabled = course_type === 'humanities' || course_type === 'hybrid';
       const { output: raw } = await runPiTurn({
         prompt: chapterPrompt,
         config,
         cwd: project_path,
         tools: ['read', 'write', 'find', 'grep'],
         sessionId: args.session_id,
+        wikiFetch: wikiFetchEnabled,
         onToolLog: () => { /* per user feedback, chapter gen stays silent: progress events suffice */ }
       });
 
@@ -705,6 +843,61 @@ export async function repairElementCompliance(queryFnUnused, config, args) {
 
   if (!raw || raw.trim().length < 2) {
     throw new Error('element-repair: agent response empty');
+  }
+}
+
+/**
+ * 构造 paper-rescue 的批量补救 prompt（纯函数，可单测）。
+ * 核心契约：**全部**失败条目的 url/title/error 全文一次性进 prompt
+ * （批量视角，agent 先找错误共性再逐篇规划），输出契约指向 scratch JSON。
+ * 空失败列表返回空串。
+ */
+export function buildPaperRescuePrompt(failures, outputFile) {
+  if (!Array.isArray(failures) || !failures.length) {
+    return '';
+  }
+  const list = failures.map((f, i) =>
+    `${i + 1}. url: ${f.url}\n   标题: ${f.title || '(未知)'}\n   错误: ${f.error}`
+  ).join('\n');
+  return `以下 ${failures.length} 篇论文的自动导入全部失败。请按 paper-rescue skill 的流程批量补救（先 Read 该 skill 的 SKILL.md 了解工具与决策树）。
+
+失败条目（错误全文即上下文，先找共性——比如全是 429 限流就该统一换 OpenAlex 源，再逐篇处理特例）：
+${list}
+
+要求：
+1. 先 Read .pi/skills/paper-rescue/SKILL.md（读不到试 .claude/skills/paper-rescue/SKILL.md），严格按其中的决策流程与预算执行
+2. 可用工具只有 read/write 和一个受限 bash（只能跑 skill 自带的两脚本：openalex-lookup / anysearch-lookup）
+3. 把结果用 Write 写到这个文件（路径原样使用）：
+   ${outputFile}
+   结构：{"attempts": [{"url": "<原始 url>", "candidates": ["https://...pdf"], "notes": "一句话"}]}
+   每个失败条目都必须有一条 attempt；无救的篇目 candidates 为空、notes 写明理由（会透出给用户）；candidates 每篇最多 3 个且必须是 http/https URL
+4. 写完回复一行总结（n 篇有候选 / m 篇无救）`;
+}
+
+/**
+ * paper-rescue stage：批量补救导入失败的论文。
+ * 一次 agent 调用处理全部失败（用户原则：批量给 agent 判断规划，不是一篇一调）。
+ * agent 用受限 bash 跑 skill 白名单脚本找候选源，把 attempts 写到 output_file，
+ * Rust 侧读回后逐篇用候选 URL 重试导入。
+ */
+export async function rescuePapers(queryFnUnused, config, args) {
+  const { failures, work_dir, output_file, anysearch_api_key } = args;
+  if (!Array.isArray(failures) || !failures.length) {
+    return;
+  }
+
+  const prompt = buildPaperRescuePrompt(failures, output_file);
+
+  const { output: raw } = await runPiTurn({
+    prompt,
+    config,
+    cwd: work_dir,
+    tools: ['read', 'write'],
+    paperRescue: { anysearchKey: anysearch_api_key || '' }
+  });
+
+  if (!raw || raw.trim().length < 2) {
+    throw new Error('paper-rescue: agent response empty');
   }
 }
 
@@ -1194,6 +1387,12 @@ async function main() {
         log('info', 'Starting paper-reader stage', { paper_file: taskArgs.paper_file, output_file: taskArgs.output_file, session_id: taskArgs.session_id || null });
         await generatePaperReaderGuide(null, config, taskArgs);
         log('info', 'Paper-reader stage completed');
+        process.exit(0);
+      }
+      case 'paper-rescue': {
+        log('info', 'Starting paper-rescue stage', { failureCount: taskArgs.failures?.length, work_dir: taskArgs.work_dir, output_file: taskArgs.output_file });
+        await rescuePapers(null, config, taskArgs);
+        log('info', 'Paper-rescue stage completed');
         process.exit(0);
       }
       case 'init': {

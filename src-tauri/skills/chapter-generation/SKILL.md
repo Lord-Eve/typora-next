@@ -152,6 +152,7 @@ End with a ONE-SENTENCE summary in a blockquote.
   - 音乐：曲目 + 乐章 + 可听的时间点（如《勃兰登堡协奏曲》第二首 第三乐章 2'30'' 处赋格主题的进入）
   - 美术/建筑：作品 + 年代 + 看点（如《夜巡》1642 年，光影的戏剧性）
   - 历史/文学：事件/文本 + 出处 + 具体细节
+- **作品实例必须尝试配试听**（仅限有 bash 工具可用时）：先 Read `wikimedia-commons/SKILL.md`（在 `.pi/skills/` 或 `.claude/skills/` 下），按其流程用 wiki-fetch 脚本查 Commons 公共领域录音，嵌入 `<audio controls preload="none">`；查不到或脚本不可用时按该 skill 的降级格式写搜索链接卡片，**不阻塞章节**。本章未引用具体乐曲则跳过
 - **≥ 1 个内联 SVG 插图**：给章节画一张 mermaid 画不出的"实物感/空间感"图——历史场景重构、建筑/剧场/城市空间布局、作品构图分析、地理路线、器物结构（选型与规范见 `references/inline-svg-spec.md` §9）；演变脉络仍用 mermaid `timeline`，不要用 SVG 重复 mermaid 的活
 - **禁止凑数伪代码 / 伪数学**：不得为了满足模板而虚构"把年代判断写成函数"这类无人需要读的代码块。本章内容不涉及编程，就没有代码块。
 - 数学公式仅在内容真需要时出现（如乐理中的频率比）
@@ -282,6 +283,7 @@ Convert the chapter title to a kebab-like slug:
 - **[examples.md](references/examples.md)** — worked examples (technical + humanities fragments) of a complete chapter + quiz.json + concepts.json. Read if you want a concrete template to mirror.
 - **[callout-format-spec.md](references/callout-format-spec.md)** — **EXACT** format for `[!question]`, `[!quiz]`, `[!answer]` callouts, including nesting, collapsible markers, and option formatting. Read this before writing the learning elements.
 - **[inline-svg-spec.md](references/inline-svg-spec.md)** — 内联 SVG 插图规范（engineering/humanities 必读）：何时画 SVG 而非 mermaid、画布/配色/兼容性硬约束、学科配方与最小示例。画 SVG 前必读。
+- **[wikimedia-commons/SKILL.md](../wikimedia-commons/SKILL.md)** — 人文课作品试听嵌入（humanities 引用具体乐曲时）：Commons API 查找流程、录音选段判断、`<audio>` 嵌入格式与降级链接卡。配试听前必读。
 
 ## Style continuity
 
