@@ -61,7 +61,7 @@ TestRunner.test('构造：正常模式初始状态', () => {
   const m = makeModal();
   TestRunner.assertEquals(m.opened, false);
   TestRunner.assertEquals(m.turns.length, 0);
-  TestRunner.assertEquals(m._readOnly, false);
+  TestRunner.assertEquals(m._resumed, false);
   TestRunner.assertEquals(m.sessionId, null);
 });
 
@@ -149,30 +149,79 @@ TestRunner.test('已保存后点结束直接关闭（不再确认不落盘）', 
 });
 
 // ============================================
-// 只读回看
+// 历史会话续聊
 // ============================================
-TestRunner.test('readOnly：不调用生成、渲染历史、标记已保存', async () => {
+TestRunner.test('续聊：打开历史只回放、不发起生成、轮次已灌入', async () => {
   setup();
   const saved = {
     selected_text: 'rdf:type', chapter_file: '00.md', session_id: 's-old',
+    file: '2026-08-11T09-00-00.json', started_at: '2026-08-11T09:00:00.000Z',
     turns: [{ role: 'tutor', content: '案例' }, { role: 'user', content: '追问' }]
   };
   const m = makeModal({ selectedText: '', savedSession: saved });
   await m.open();
   TestRunner.assertEquals(_invokeCalls.filter(c => c.cmd === 'case_study_chat').length, 0);
-  TestRunner.assertEquals(m._readOnly, true);
-  TestRunner.assertEquals(m._sessionSaved, true);
+  TestRunner.assertEquals(m._resumed, true);
   TestRunner.assertEquals(m.selectedText, 'rdf:type', '概念取自 savedSession');
+  TestRunner.assertEquals(m.turns.length, 2, '已存轮次必须灌进 turns（否则落盘会截断原对话）');
+  TestRunner.assertEquals(m._sessionFile, '2026-08-11T09-00-00.json');
+  TestRunner.assertEquals(m._startedAt, '2026-08-11T09:00:00.000Z', '沿用原会话开始时间');
+  TestRunner.assertEquals(m._sessionSaved, false, '续聊后需要重新落盘');
 });
 
-TestRunner.test('readOnly：_handleSend 直接忽略', async () => {
+TestRunner.test('续聊：输入可用且带原 sessionId 继续追问', async () => {
   setup();
-  const saved = { selected_text: 'x', turns: [] };
+  const saved = {
+    selected_text: 'x', session_id: 's-old',
+    turns: [{ role: 'tutor', content: '旧案例' }]
+  };
   const m = makeModal({ selectedText: '', savedSession: saved });
   await m.open();
-  m._shell.takeInput = () => '不应发送';
+  m._shell.takeInput = () => '接着问';
   await m._handleSend();
-  TestRunner.assertEquals(_invokeCalls.filter(c => c.cmd === 'case_study_chat').length, 0);
+  const calls = _invokeCalls.filter(c => c.cmd === 'case_study_chat');
+  TestRunner.assertEquals(calls.length, 1, '续聊应真的发起一次追问');
+  TestRunner.assertEquals(calls[0].args.sessionId, 's-old', '必须续接原 pi session');
+  TestRunner.assertEquals(calls[0].args.userAnswer, '接着问');
+  TestRunner.assertEquals(m.turns.length, 3, '旧轮次 + 新问 + 新答');
+});
+
+TestRunner.test('续聊落盘：回传原文件名覆盖 + 轮次不丢 + 沿用原 started_at', async () => {
+  setup();
+  const saved = {
+    selected_text: 'rdf:type', chapter_file: '00.md', session_id: 's-old',
+    file: '2026-08-11T09-00-00.json', started_at: '2026-08-11T09:00:00.000Z',
+    turns: [{ role: 'tutor', content: '旧1' }, { role: 'user', content: '旧2' }]
+  };
+  const m = makeModal({ selectedText: '', savedSession: saved });
+  await m.open();
+  m._shell.takeInput = () => '新追问';
+  await m._handleSend();
+  m._handleEndClick();
+  await new Promise(r => setTimeout(r, 20));
+  const save = _invokeCalls.find(c => c.cmd === 'case_study_save_session');
+  TestRunner.assertExists(save, 'save should be invoked');
+  TestRunner.assertEquals(save.args.overwriteFile, '2026-08-11T09-00-00.json', '必须覆盖原会话文件');
+  TestRunner.assertEquals(save.args.session.turns.length, 4, '旧2轮 + 新问 + 新答');
+  TestRunner.assertEquals(save.args.session.started_at, '2026-08-11T09:00:00.000Z');
+});
+
+TestRunner.test('续聊但无新增轮次：不重写文件（避免污染 ended_at）', async () => {
+  setup();
+  const saved = {
+    selected_text: 'x', session_id: 's-old',
+    file: '2026-08-11T09-00-00.json',
+    turns: [{ role: 'tutor', content: '旧' }]
+  };
+  const m = makeModal({ selectedText: '', savedSession: saved });
+  await m.open();
+  m._handleEndClick(); // confirm=true → confirmEnd
+  await new Promise(r => setTimeout(r, 20));
+  TestRunner.assertEquals(
+    _invokeCalls.filter(c => c.cmd === 'case_study_save_session').length, 0,
+    '无新增轮次不应落盘'
+  );
+  TestRunner.assertEquals(m.opened, false, '仍应正常关闭');
 });
 
 TestRunner.test('openHistory：无记录时 toast 提示', async () => {

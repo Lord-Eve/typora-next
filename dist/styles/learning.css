@@ -3247,6 +3247,21 @@ body.learning-mode .toolbar {
   color: var(--color-text-muted);
 }
 
+/* 锁定态（会话结束后 / 不可输入时）必须有明显视觉差异：
+   原先只设了 disabled 属性而无任何样式，输入框看上去完全可编辑，
+   用户只会判定为“输入框坏了”（2026-09-17 实爆）。 */
+.socratic-input:disabled {
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-muted);
+  border-style: dashed;
+  cursor: not-allowed;
+}
+
+.socratic-input:disabled::placeholder {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
 .socratic-send-btn {
   padding: 9px 18px;
   border-radius: 10px;
@@ -3262,6 +3277,12 @@ body.learning-mode .toolbar {
 
 .socratic-send-btn:hover {
   opacity: 0.9;
+}
+
+.socratic-send-btn:disabled {
+  opacity: 0.45;
+  filter: grayscale(0.5);
+  cursor: not-allowed;
 }
 
 .socratic-input-hint {
@@ -3889,7 +3910,12 @@ body.learning-mode .toolbar {
 .socratic-bubble-md pre {
   margin: 6px 0;
   padding: 8px 10px;
-  background: rgba(127, 127, 127, 0.12);
+  /* 底色必须与正文代码块一致（main.css `pre { background: #1e1e2e }`）。
+     此处原为 rgba(127,127,127,0.12) 半透明灰：白天主题下合成出浅底，而代码
+     文字色来自 main.css `pre code { color: #cdd6f4 }`（专为深底设计），
+     浅底 + 浅字 → 案例研习 / 苏格拉底气泡里的代码块几乎不可读
+     （2026-09-17 实爆）。深色主题只因半透明灰叠在暗底上才碰巧正常。 */
+  background: #1e1e2e;
   border-radius: 6px;
   overflow-x: auto;
   font-size: 12px;

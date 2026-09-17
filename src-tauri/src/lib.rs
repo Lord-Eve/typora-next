@@ -11,6 +11,7 @@ use tauri::{AppHandle, Emitter, Manager};
 
 pub mod agent_sdk_probe;
 pub mod ai_agent;
+pub mod case_study_store;
 pub mod course_completion;
 mod docx_template;
 pub mod element_compliance;
@@ -4943,63 +4944,27 @@ async fn socratic_save_session(
     Ok(file_path.display().to_string())
 }
 
-/// 案例研习会话落盘（.learning/case-studies/{ts}.json）。
+/// 案例研习会话落盘（.learning/case-studies/{name}.json）。
 /// session schema 由前端持有（selected_text/chapter_file/session_id/turns/...），
 /// Rust 只做写盘，用 Value 透传。
+///
+/// `overwrite_file`：历史会话续聊时前端回传的原文件名（列表接口注入），
+/// 传了则覆盖原文件——否则每续聊一次就会多出一条重复的历史记录。
 #[tauri::command]
 async fn case_study_save_session(
     project_path: String,
     session: serde_json::Value,
+    overwrite_file: Option<String>,
 ) -> Result<String, String> {
-    let sessions_dir = std::path::PathBuf::from(&project_path)
-        .join(".learning")
-        .join("case-studies");
-    std::fs::create_dir_all(&sessions_dir)
-        .map_err(|e| format!("创建 case-studies 目录失败: {}", e))?;
-
-    let ended = session
-        .get("ended_at")
-        .and_then(|v| v.as_str())
-        .unwrap_or("unknown")
-        .replace(':', "-")
-        .replace('.', "-");
-    let file_path = sessions_dir.join(format!("{}.json", ended));
-    let json = serde_json::to_string_pretty(&session)
-        .map_err(|e| format!("序列化 case study session 失败: {}", e))?;
-    std::fs::write(&file_path, json).map_err(|e| format!("写入 case study session 失败: {}", e))?;
-    Ok(file_path.display().to_string())
+    let path = case_study_store::save_session(&project_path, &session, overwrite_file.as_deref())?;
+    Ok(path.display().to_string())
 }
 
-/// 列出案例研习历史会话（新→旧），供只读回看。
+/// 列出案例研习历史会话（新→旧），供历史列表 / 续聊。
+/// 每条会被注入 `file` 字段（会话身份），前端续聊时回传给 save。
 #[tauri::command]
 async fn case_study_list_sessions(project_path: String) -> Result<Vec<serde_json::Value>, String> {
-    let sessions_dir = std::path::PathBuf::from(&project_path)
-        .join(".learning")
-        .join("case-studies");
-    if !sessions_dir.exists() {
-        return Ok(vec![]);
-    }
-    let mut sessions = vec![];
-    let entries = std::fs::read_dir(&sessions_dir)
-        .map_err(|e| format!("读取 case-studies 目录失败: {}", e))?;
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.extension().and_then(|s| s.to_str()) != Some("json") {
-            continue;
-        }
-        if let Ok(content) = std::fs::read_to_string(&path) {
-            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&content) {
-                sessions.push(v);
-            }
-        }
-    }
-    // 文件名即 ISO 时间戳，按 ended_at 倒序（新→旧）
-    sessions.sort_by(|a, b| {
-        let ea = a.get("ended_at").and_then(|v| v.as_str()).unwrap_or("");
-        let eb = b.get("ended_at").and_then(|v| v.as_str()).unwrap_or("");
-        eb.cmp(ea)
-    });
-    Ok(sessions)
+    case_study_store::list_sessions(&project_path)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

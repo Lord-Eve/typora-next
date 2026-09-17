@@ -29,10 +29,20 @@ Feature: 课程案例研习（Case Study）
     When case study history is listed
     Then sessions should come back newest first
 
-  Scenario: 只读回看不再生成、输入禁用
+  Scenario: 历史会话续聊：打开只回放、不自动生成、输入可用
     Given a saved case study session on disk
-    When the session is reopened read-only
-    Then no case_study_chat call should happen and the input should be locked
+    When the session is reopened for resume
+    Then no case_study_chat call should happen and the input should be enabled
+
+  Scenario: 续聊落盘覆盖原会话，历史不产生重复条目
+    Given a saved case study session on disk
+    When the user continues the conversation and ends it
+    Then the history should keep a single entry with all turns preserved
+
+  Scenario: 翻开历史但不追问，不重写会话文件
+    Given a saved case study session on disk
+    When the user reopens it without sending anything and ends
+    Then the session file should be left untouched
 
   Scenario: 后端接线（skill / bridge / Rust / index.html）
     Given the real project sources
@@ -73,3 +83,7 @@ Feature: 课程案例研习（Case Study）
   Scenario: 气泡复用全局 markdown 渲染（UX 修正 2026-08-11 第二轮）
     Given the real project sources
     Then the shell should render tutor bubbles via markdownToHtml with escape fallback
+
+  Scenario: 气泡代码块在白天主题下可读（配色回归 2026-09-17）
+    Given the real project sources
+    Then the case study bubble code blocks should be readable in both themes

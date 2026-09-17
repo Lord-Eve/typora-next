@@ -330,11 +330,13 @@ function _caseStudyChat(args) {
 }
 function _getCaseStudyChatCalls() { return _caseStudyChatCalls; }
 
-function _caseStudySaveSession({ projectPath, session }) {
+function _caseStudySaveSession({ projectPath, session, overwriteFile }) {
   const sessionsDir = path.join(projectPath, '.learning', 'case-studies');
   fs.mkdirSync(sessionsDir, { recursive: true });
+  // 续聊：沿用原文件名覆盖写盘，不得新建重复条目（与 Rust case_study_store 同契约）
   const ts = (session.ended_at || new Date().toISOString()).replace(/[:.]/g, '-');
-  const filePath = path.join(sessionsDir, `${ts}.json`);
+  const fileName = overwriteFile || `${ts}.json`;
+  const filePath = path.join(sessionsDir, fileName);
   fs.writeFileSync(filePath, JSON.stringify(session, null, 2), 'utf-8');
   return filePath;
 }
@@ -346,7 +348,9 @@ function _caseStudyListSessions({ projectPath }) {
   for (const f of fs.readdirSync(sessionsDir)) {
     if (!f.endsWith('.json')) continue;
     try {
-      sessions.push(JSON.parse(fs.readFileSync(path.join(sessionsDir, f), 'utf-8')));
+      const s = JSON.parse(fs.readFileSync(path.join(sessionsDir, f), 'utf-8'));
+      s.file = f; // 会话身份：续聊时回传给 save 以覆盖原文件
+      sessions.push(s);
     } catch (_) { /* skip broken */ }
   }
   sessions.sort((a, b) => String(b.ended_at || '').localeCompare(String(a.ended_at || '')));

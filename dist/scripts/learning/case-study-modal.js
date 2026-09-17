@@ -9,7 +9,9 @@
  * 案例研习是「AI 讲案例 + 你追问」（围绕选中概念）。无 done 状态，
  * 用户手动关闭（二次确认），会话落盘 .learning/case-studies/。
  *
- * readOnly 模式：传入 savedSession 回看历史会话（禁用输入）。
+ * 续聊模式：传入 savedSession 即从历史列表接着聊——回放已存轮次、输入可用、
+ * 结束落盘时覆盖原会话文件（身份取自 savedSession.file）。打开时只回放，
+ * 不自动发起 LLM 调用（避免“看一眼历史就烧一次 token”）。
  */
 
 (function() {
@@ -60,16 +62,27 @@
       this.savedSession = opts.savedSession || null;
 
       this.sessionId = (this.savedSession && this.savedSession.session_id) || null;
-      this.turns = [];
+      // 续聊必须先把已存轮次灌进 turns：否则再次落盘写出的会话只剩新增轮次，
+      // 原对话被截断（turns 是落盘时的单一数据源）
+      this.turns = (this.savedSession && Array.isArray(this.savedSession.turns))
+        ? this.savedSession.turns.slice()
+        : [];
+      // 原会话文件名（list_sessions 注入）：续聊落盘靠它覆盖原文件，
+      // 否则每续聊一次就在历史里多出一条重复记录
+      // 续聊落盘基线：只有新增了轮次才重写文件。否则“翻开历史看一眼就又关掉”
+      // 会把 ended_at 改写成当下时间（历史列表按它排序，条目会莫名跳到顶部）
+      this._resumedTurnCount = this.turns.length;
+      this._sessionFile = (this.savedSession && this.savedSession.file) || null;
       this.opened = false;
       this._sessionSaved = false;
-      this._startedAt = null;
+      // 续聊时沿用原会话开始时间，不重置为本次打开时间
+      this._startedAt = (this.savedSession && this.savedSession.started_at) || null;
       this._shell = null;
-      this._readOnly = !!this.savedSession;
+      this._resumed = !!this.savedSession;
     }
 
     async open() {
-      this._startedAt = new Date().toISOString();
+      if (!this._resumed) this._startedAt = new Date().toISOString();
       this.opened = true;
 
       const esc = escapeHtml(this.selectedText);
@@ -83,7 +96,7 @@
         title: '案例研习',
         subtitle: `概念: ${esc}`,
         chipsHtml,
-        placeholder: this._readOnly ? '📋 历史会话（只读）' : '📋 正在生成案例...',
+        placeholder: this._resumed ? '📋 已恢复历史会话，可继续追问' : '📋 正在生成案例...',
         tutorAvatar: '📋'
       });
       this._shell.render();
@@ -92,13 +105,13 @@
         onEndClick: () => this._handleEndClick()
       });
 
-      if (this._readOnly) {
-        for (const t of (this.savedSession.turns || [])) {
+      if (this._resumed) {
+        // 只回放，不发起 LLM 调用（打开历史 ≠ 续聊）
+        for (const t of this.turns) {
           if (t.role === 'user') this._shell.appendUserBubble(t.content);
           else this._shell.appendTutorBubble(t.content);
         }
-        this._shell.lockInput();
-        this._sessionSaved = true; // 回看模式不再落盘
+        // 输入框保持可用：用户就是来接着聊的；结束时覆盖落盘
         return;
       }
 
@@ -161,7 +174,6 @@
     }
 
     async _handleSend() {
-      if (this._readOnly) return;
       const text = this._shell.takeInput();
       if (!text) return;
       this._shell.appendUserBubble(text);
@@ -187,6 +199,14 @@
 
     async _persistSession(reason) {
       if (this._sessionSaved) return true;
+
+      // 续聊但没有任何新增轮次 → 不动盘（内容与已有文件逐字相同，重写只会污染
+      // ended_at 并让历史条目无端置顶）
+      if (this._resumed && this.turns.length === this._resumedTurnCount) {
+        this._sessionSaved = true;
+        return true;
+      }
+
       this._sessionSaved = true;
 
       if (!window.__TAURI__) return true;
@@ -203,10 +223,15 @@
       };
 
       try {
-        await window.__TAURI__.core.invoke('case_study_save_session', {
+        const savedPath = await window.__TAURI__.core.invoke('case_study_save_session', {
           projectPath: this.projectPath,
-          session
+          session,
+          // 续聊：覆盖原会话文件（身份来自 list_sessions 注入的 file）
+          overwriteFile: this._sessionFile
         });
+        if (savedPath) {
+          this._sessionFile = String(savedPath).split(/[\\/]/).pop();
+        }
         return true;
       } catch (e) {
         console.error('[CaseStudyModal] save_session failed:', e);
@@ -222,8 +247,8 @@
     }
 
     /**
-     * 历史回看入口（无划词时）：列出 .learning/case-studies/ 会话，
-     * 点击条目进入只读回看。
+     * 历史入口（无划词时）：列出 .learning/case-studies/ 会话，
+     * 点击条目**继续对话**（回放已存轮次 + 输入可用，落盘覆盖原会话）。
      */
     static async openHistory(projectPath) {
       if (!window.__TAURI__) return;
@@ -253,7 +278,7 @@
               <div class="socratic-modal-icon">📋</div>
               <div>
                 <div class="socratic-modal-title">案例研习记录</div>
-                <div class="socratic-modal-subtitle">${sessions.length} 场会话 · 点击查看</div>
+                <div class="socratic-modal-subtitle">${sessions.length} 场会话 · 点击继续对话</div>
               </div>
             </div>
             <button id="casestudyHistoryCloseBtn" class="socratic-modal-end-btn">关闭</button>

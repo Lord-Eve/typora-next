@@ -39,6 +39,19 @@ let totalFailed = 0;
 const TESTS_ROOT = path.join(__dirname);
 
 /**
+ * A discovered test file: CommonJS (.js) or ESM (.mjs).
+ * .mjs 必须一并发现——ESM 测试不能靠改名 .js 绕过（package.json 无 "type":"module"）。
+ */
+function isTestFile(f) {
+  return f.startsWith('test_') && (f.endsWith('.js') || f.endsWith('.mjs'));
+}
+
+/** Strip the test file extension for display: test_foo.js / test_foo.mjs → test_foo */
+function testDisplayName(testFile) {
+  return path.basename(testFile).replace(/\.m?js$/, '');
+}
+
+/**
  * Auto-discover tests for a given sprint
  */
 function discoverSprint(sprintNum) {
@@ -57,7 +70,7 @@ function discoverSprint(sprintNum) {
   const unitDir = path.join(base, 'unit');
   if (fs.existsSync(unitDir)) {
     sprint.unitTests = fs.readdirSync(unitDir)
-      .filter(f => f.startsWith('test_') && f.endsWith('.js'))
+      .filter(isTestFile)
       .map(f => path.join(unitDir, f));
   }
 
@@ -65,7 +78,7 @@ function discoverSprint(sprintNum) {
   const integrationDir = path.join(base, 'integration');
   if (fs.existsSync(integrationDir)) {
     sprint.integrationTests = fs.readdirSync(integrationDir)
-      .filter(f => f.startsWith('test_') && f.endsWith('.js'))
+      .filter(isTestFile)
       .map(f => path.join(integrationDir, f));
   }
 
@@ -213,7 +226,7 @@ async function main() {
     // Unit tests
     if (runUnit) {
       for (const testFile of sprint.unitTests) {
-        const testName = path.basename(testFile, '.js');
+        const testName = testDisplayName(testFile);
         runTestSuite(`Unit [Sprint ${sprint.id}]: ${testName}`, testFile);
       }
     }
@@ -221,7 +234,7 @@ async function main() {
     // Integration tests
     if (runIntegration) {
       for (const testFile of sprint.integrationTests) {
-        const testName = path.basename(testFile, '.js');
+        const testName = testDisplayName(testFile);
         runTestSuite(`Integration [Sprint ${sprint.id}]: ${testName}`, testFile);
       }
     }
