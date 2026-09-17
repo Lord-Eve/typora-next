@@ -46,6 +46,20 @@ pub fn open_command(exe_path: &str) -> String {
     format!("\"{exe_path}\" \"%1\"")
 }
 
+/// 从 `"<exe路径>" "%1"` 形式的打开命令中提取 exe 文件名（比较用）。
+/// 兼容无引号写法（`C:\path\app.exe %1`）。
+fn command_exe_file_name(command: &str) -> Option<String> {
+    let trimmed = command.trim();
+    let path_part = if let Some(rest) = trimmed.strip_prefix('"') {
+        &rest[..rest.find('"')?]
+    } else {
+        trimmed.split_whitespace().next()?
+    };
+    Path::new(path_part)
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+}
+
 /// DefaultIcon 的期望内容：`<exe>,0`
 pub fn icon_value(exe_path: &str) -> String {
     format!("{exe_path},0")
@@ -57,8 +71,10 @@ pub fn icon_value(exe_path: &str) -> String {
 /// - ProgID 本体（名称/图标/打开命令）：与期望不符即重写（覆盖陈旧路径）
 /// - 扩展名 → ProgID 映射：仅在缺失或已指向我们时写入（不劫持用户选的其他应用）
 /// - OpenWithProgids：缺失则补（只增不删）
-/// - Applications\<exe文件名>：缺失、或指向含 "TyporaNext" 的陈旧路径时重写
-///   （用户在「打开方式」里选出的 UserChoice 依赖此键；指向无关程序则不动）
+/// - Applications\<exe文件名>：缺失、或指向同名 exe 的其他路径时重写
+///   （旧安装目录、开发构建 target\release\app.exe 等——2026-09-17 实机 bug：
+///   UserChoice 经此键指向开发构建旧版，仅判 "TyporaNext" 子串漏修；
+///   文件名不同才是无关程序，不动）
 pub fn plan_repairs(
     spec: &AssocSpec,
     exe_path: &str,
@@ -126,7 +142,12 @@ pub fn plan_repairs(
         let desired = open_command(exe_path);
         let writable = match read(&app_key, "") {
             None => true,
-            Some(cur) => cur == desired || cur.contains("TyporaNext"),
+            Some(cur) => {
+                cur == desired
+                    || command_exe_file_name(&cur)
+                        .map(|n| n.eq_ignore_ascii_case(&exe_name))
+                        .unwrap_or(false)
+            }
         };
         if writable && read(&app_key, "").as_deref() != Some(desired.as_str()) {
             ops.push(RepairOp {

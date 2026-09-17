@@ -219,7 +219,28 @@ fn repair_is_idempotent() {
     assert_eq!(second, Vec::<RepairOp>::new());
 }
 
-/// Applications\app.exe 指向无关程序时不动
+/// 场景：Applications\app.exe 指向开发构建路径（不含 TyporaNext）时重写
+/// 2026-09-17 实机 bug：UserChoice 记录 Applications\app.exe →
+/// target\release\app.exe（开发构建旧版），应用内更新后双击 .md 仍开旧版。
+#[test]
+fn dev_build_same_name_exe_is_rewritten() {
+    let mut reg = healthy_reg();
+    set(
+        &mut reg,
+        r"Software\Classes\Applications\app.exe\shell\open\command",
+        "",
+        "\"C:\\CODE\\typora-next\\src-tauri\\target\\release\\app.exe\" \"%1\"",
+    );
+    let ops = plan_repairs(&spec(), EXE, &reader(&reg));
+    let app_ops: Vec<_> = ops
+        .iter()
+        .filter(|op| op.key_path.contains("Applications"))
+        .collect();
+    assert_eq!(app_ops.len(), 1, "应重写 Applications 键：{ops:?}");
+    assert_eq!(app_ops[0].value_data, open_command(EXE));
+}
+
+/// Applications\app.exe 指向无关程序（文件名不同）时不动
 #[test]
 fn unrelated_applications_key_is_untouched() {
     let mut reg = healthy_reg();
@@ -227,7 +248,7 @@ fn unrelated_applications_key_is_untouched() {
         &mut reg,
         r"Software\Classes\Applications\app.exe\shell\open\command",
         "",
-        "\"C:\\somewhere-else\\app.exe\" \"%1\"",
+        "\"C:\\somewhere-else\\other-editor.exe\" \"%1\"",
     );
     let ops = plan_repairs(&spec(), EXE, &reader(&reg));
     assert!(!ops.iter().any(|op| op.key_path.contains("Applications")));
