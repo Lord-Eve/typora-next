@@ -454,6 +454,16 @@ async function runAcceptanceTests() {
   totalPassed += paperRescueResult.passed;
   totalFailed += paperRescueResult.failed;
 
+  // Sprint 32: 安装期 Windows Shell 契约（快捷方式图标 + ICO 编码）
+  console.log(`\n${YELLOW}▶ Sprint 32: Installer shell contract${RESET}`);
+  const installerShellSteps = require('./sprint32_installer_shell_contract.steps');
+  const installerShellResult = await runFeatureFile(
+    path.join(__dirname, '../sprint32/features/sprint32_installer_shell_contract.feature'),
+    installerShellSteps
+  );
+  totalPassed += installerShellResult.passed;
+  totalFailed += installerShellResult.failed;
+
   if (sprint10Steps._cleanup) sprint10Steps._cleanup.call({});
   if (paperImportSteps._cleanup) paperImportSteps._cleanup.call({});
   if (toolbarTooltipSteps._cleanup) toolbarTooltipSteps._cleanup.call({});
