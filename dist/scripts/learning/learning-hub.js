@@ -144,6 +144,7 @@
         <div class="learning-hub-footer">
           <button class="learning-hub-new-btn" id="learningHubNew">+ 新建学习项目</button>
           <button class="learning-hub-import-btn" id="learningHubImport">📂 导入已有项目</button>
+          <button class="learning-hub-import-btn" id="learningHubImportZip">📦 导入课程包</button>
         </div>
       </div>
     `;
@@ -161,6 +162,7 @@
       }
     });
     document.getElementById('learningHubImport').addEventListener('click', importProject);
+    document.getElementById('learningHubImportZip').addEventListener('click', importCourseZip);
     // Overlay click does NOT close hub (prevent accidental close)
     // Only X button can close the hub
   }
@@ -197,7 +199,10 @@
             </div>
           </div>
         </div>
-        <button class="learning-hub-card-delete" data-path="${escapeAttr(project.path)}" title="删除项目">🗑️</button>
+        <div class="learning-hub-card-actions">
+          <button class="learning-hub-card-share" data-path="${escapeAttr(project.path)}" title="分享课程（打包为 zip，不含学习进度）">📤</button>
+          <button class="learning-hub-card-delete" data-path="${escapeAttr(project.path)}" title="删除项目">🗑️</button>
+        </div>
       </div>
     `).join('');
 
@@ -205,8 +210,16 @@
     container.querySelectorAll('.learning-hub-card').forEach(card => {
       card.addEventListener('click', (e) => {
         if (e.target.closest('.learning-hub-card-delete')) return;
+        if (e.target.closest('.learning-hub-card-share')) return;
         const path = card.dataset.path;
         openProject(path);
+      });
+    });
+
+    container.querySelectorAll('.learning-hub-card-share').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        shareCourse(btn.dataset.path);
       });
     });
 
@@ -250,34 +263,81 @@
       const folderPath = await invoke('open_folder_dialog');
       if (!folderPath) return; // User cancelled
 
-      // Detect if this folder contains a learning project
-      const projectInfo = await detectProjectAt(folderPath);
-      if (!projectInfo) {
-        alert('所选文件夹不是学习项目（未找到 .learning/project.json）');
-        return;
-      }
-
-      // Check if already in list
-      if (currentList && currentList.get(folderPath)) {
-        alert(`"${projectInfo.name}" 已经在项目列表中`);
-        return;
-      }
-
-      // Register
-      if (currentList) {
-        currentList.add({
-          path: folderPath,
-          name: projectInfo.name,
-          chapters: projectInfo.chapters,
-          completed: projectInfo.completed
-        });
-        await currentList.save();
-        renderProjectList();
-        console.log('[LearningHub] Imported project:', projectInfo.name, 'at', folderPath);
-      }
+      await registerImportedProject(folderPath);
     } catch (err) {
       console.error('[LearningHub] Failed to import project:', err);
       alert('导入失败: ' + (err.message || err));
+    }
+  }
+
+  // 导入课程分享包（zip）：解压由 Rust 完成，返回新课程目录路径
+  async function importCourseZip() {
+    if (!window.__TAURI__) {
+      alert('导入功能需要 Tauri 环境');
+      return;
+    }
+
+    try {
+      const { invoke } = window.__TAURI__.core;
+      const folderPath = await invoke('import_course');
+      if (!folderPath) return; // User cancelled
+
+      await registerImportedProject(folderPath);
+    } catch (err) {
+      console.error('[LearningHub] Failed to import course zip:', err);
+      alert('导入课程包失败: ' + (err.message || err));
+    }
+  }
+
+  // 导入共用尾部：检测项目 → 去重 → 注册 → 刷新
+  async function registerImportedProject(folderPath) {
+    // Detect if this folder contains a learning project
+    const projectInfo = await detectProjectAt(folderPath);
+    if (!projectInfo) {
+      alert('所选文件夹不是学习项目（未找到 .learning/project.json）');
+      return;
+    }
+
+    // Check if already in list
+    if (currentList && currentList.get(folderPath)) {
+      alert(`"${projectInfo.name}" 已经在项目列表中`);
+      return;
+    }
+
+    // Register
+    if (currentList) {
+      currentList.add({
+        path: folderPath,
+        name: projectInfo.name,
+        chapters: projectInfo.chapters,
+        completed: projectInfo.completed
+      });
+      await currentList.save();
+      renderProjectList();
+      console.log('[LearningHub] Imported project:', projectInfo.name, 'at', folderPath);
+    }
+  }
+
+  // ============================================
+  // 课程分享（只打包课程内容，不含学习上下文）
+  // ============================================
+
+  async function shareCourse(path) {
+    if (!window.__TAURI__) {
+      alert('分享功能需要 Tauri 环境');
+      return;
+    }
+
+    try {
+      const { invoke } = window.__TAURI__.core;
+      const result = await invoke('share_course', { projectPath: path });
+      const toast = window.showToast || alert;
+      toast('课程分享打包成功: ' + result);
+    } catch (err) {
+      const msg = err.message || String(err);
+      if (msg.includes('用户取消')) return; // 取消保存不报错
+      console.error('[LearningHub] Failed to share course:', err);
+      alert('分享失败: ' + msg);
     }
   }
 
@@ -352,6 +412,6 @@
 
   // Export for Node.js testing
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { ProjectList };
+    module.exports = { ProjectList, detectProjectAt };
   }
 })();

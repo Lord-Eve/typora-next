@@ -1382,6 +1382,26 @@
   transition: width 0.3s ease;
 }
 
+.learning-hub-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.learning-hub-card-share {
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: background 0.15s ease;
+}
+
+.learning-hub-card-share:hover {
+  background: #e0e7ff;
+}
+
 .learning-hub-card-delete {
   background: none;
   border: none;
@@ -1472,6 +1492,10 @@
 
 [data-theme="dark"] .learning-hub-card-name {
   color: #e0e0e0;
+}
+
+[data-theme="dark"] .learning-hub-card-share:hover {
+  background: #312e81;
 }
 
 [data-theme="dark"] .learning-hub-card-delete:hover {

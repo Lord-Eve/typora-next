@@ -464,6 +464,17 @@ async function runAcceptanceTests() {
   totalPassed += installerShellResult.passed;
   totalFailed += installerShellResult.failed;
 
+  // 课程分享：内容打包 + 应用内导入（不含学习上下文）
+  console.log(`\n${YELLOW}▶ Course Share (content-only zip)${RESET}`);
+  const courseShareSteps = require('./course_share.steps');
+  const courseShareResult = await runFeatureFile(
+    path.join(__dirname, '../course-share/features/course_share.feature'),
+    courseShareSteps
+  );
+  totalPassed += courseShareResult.passed;
+  totalFailed += courseShareResult.failed;
+  if (courseShareSteps._cleanup) courseShareSteps._cleanup.call({});
+
   if (sprint10Steps._cleanup) sprint10Steps._cleanup.call({});
   if (paperImportSteps._cleanup) paperImportSteps._cleanup.call({});
   if (toolbarTooltipSteps._cleanup) toolbarTooltipSteps._cleanup.call({});

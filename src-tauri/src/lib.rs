@@ -31,6 +31,7 @@ pub mod proxy_config;
 pub mod quiz_quality;
 pub mod roadmap_prompt;
 pub mod sdk_install;
+pub mod share_course;
 pub mod share_images;
 pub mod skills_bundle;
 pub mod translation_clean;
@@ -1189,6 +1190,100 @@ async fn share_document(
             Err("用户取消保存".to_string())
         }
     }
+}
+
+/// 分享课程：打包课程内容（不含学习上下文）为 ZIP。
+/// 白名单打包——暂存目录只写净化后的清单、章节文件与引用图片，
+/// quiz-history / knowledge-graph / agent-session / papers 等不会入包
+///（细节见 share_course.rs 模块头注释）。
+#[tauri::command]
+async fn share_course(
+    project_path: String,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<String, String> {
+    let temp_dir =
+        std::env::temp_dir().join(format!("typora-course-share-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&temp_dir);
+    fs::create_dir_all(&temp_dir).map_err(|e| format!("创建临时目录失败: {}", e))?;
+
+    let summary = {
+        // 持锁读取 project.json，防止 persist_quiz_result 等并发改写
+        let _project_guard = state
+            .project_json_lock
+            .lock()
+            .map_err(|e| format!("获取 project.json 锁失败: {}", e))?;
+        share_course::stage_course_bundle(std::path::Path::new(&project_path), &temp_dir)?
+    };
+
+    let zip_name = format!(
+        "{}-course.zip",
+        learning_paths::sanitize_dir_name(&summary.course_name)
+    );
+    let zip_path = temp_dir.join(&zip_name);
+    share_course::write_zip_from_dir(&temp_dir, &zip_path)?;
+
+    use tauri_plugin_dialog::DialogExt;
+    let save_path = app
+        .dialog()
+        .file()
+        .add_filter("ZIP 文件", &["zip"])
+        .set_file_name(&zip_name)
+        .blocking_save_file();
+
+    match save_path {
+        Some(path_ref) => {
+            let dest = path_ref.as_path().unwrap_or(std::path::Path::new(""));
+            fs::copy(&zip_path, dest).map_err(|e| format!("保存文件失败: {}", e))?;
+            let _ = fs::remove_dir_all(&temp_dir);
+            Ok(dest.display().to_string())
+        }
+        None => {
+            let _ = fs::remove_dir_all(&temp_dir);
+            Err("用户取消保存".to_string())
+        }
+    }
+}
+
+/// 导入课程分享包：解压为新课程目录并返回其路径（用户取消时返回空串）。
+/// 状态已在导出端净化（ready / not_generated），导入后自然显示零进度。
+#[tauri::command]
+async fn import_course(app: tauri::AppHandle) -> Result<String, String> {
+    use tauri_plugin_dialog::DialogExt;
+
+    let zip_ref = app
+        .dialog()
+        .file()
+        .add_filter("课程分享包", &["zip"])
+        .blocking_pick_file();
+    let zip_path = match zip_ref.as_ref().and_then(|p| p.as_path()) {
+        Some(p) => p.to_path_buf(),
+        None => return Ok(String::new()),
+    };
+
+    let manifest = share_course::read_manifest_from_zip(&zip_path)
+        .map_err(|e| format!("不是有效的课程分享包: {e}"))?;
+    share_course::validate_course_manifest(&manifest)
+        .map_err(|e| format!("不是有效的课程分享包: {e}"))?;
+    let course_name = manifest
+        .get("name")
+        .and_then(|n| n.as_str())
+        .unwrap_or("course")
+        .to_string();
+
+    let parent_ref = app.dialog().file().blocking_pick_folder();
+    let parent = match parent_ref.as_ref().and_then(|p| p.as_path()) {
+        Some(p) => p.to_string_lossy().to_string(),
+        None => return Ok(String::new()),
+    };
+
+    let dest = learning_paths::create_project_subdir_impl(parent, course_name)?;
+    share_course::extract_zip_to(&zip_path, std::path::Path::new(&dest))?;
+
+    // 接收方可重新生成缺失章节：拷贝内置技能（best-effort，与其他导入路径一致）
+    let _ = ai_agent::copy_bundled_skills_to_project(&dest);
+
+    Ok(dest)
 }
 
 // ============================================
@@ -5060,6 +5155,8 @@ pub fn run() {
             get_platform,
             show_in_folder,
             share_document,
+            share_course,
+            import_course,
             get_annotations,
             add_annotation,
             delete_annotation,
