@@ -197,8 +197,10 @@ steps.then('fresh sessions should get skill refs inlined', function () {
   if (!this.agentBridge.includes('collectChapterSkillRefs')) {
     throw new Error('agent-bridge.mjs missing collectChapterSkillRefs helper');
   }
-  // 无 session 时 prompt 前拼参考资料（修"session 里已读过"为假的 bug）
-  if (!this.agentBridge.includes("args.session_id ? '' : collectChapterSkillRefs(project_path)")) {
+  // 无 session 时 prompt 前拼参考资料（修"session 里已读过"为假的 bug）。
+  // Sprint 31 并行化后条件变量为 useSession（仅最低位章节续接 session，
+  // 其余 fresh-session 同样必须 inline）。
+  if (!this.agentBridge.includes("useSession ? '' : collectChapterSkillRefs(project_path)")) {
     throw new Error('fresh-session mode should inline skill refs into the chapter prompt');
   }
 });

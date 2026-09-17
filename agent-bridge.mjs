@@ -572,7 +572,7 @@ export function collectChapterSkillRefs(projectPath) {
 // courseType is optional — emitted only when the host supplied a value.
 // hasSession switches item 1 between "already in session context" and
 // "inlined above / re-Read if incomplete" (fresh sessions never saw the skill).
-export function buildChapterPrompt({ index, chapter, projectPath, previousChapters, courseType, hasSession, prevError }) {
+export function buildChapterPrompt({ index, chapter, projectPath, previousChapters, courseType, hasSession, prevError, prevChapter }) {
   const courseTypeLine = courseType ? `- course_type: ${courseType}\n` : '';
   const skillNote = hasSession
     ? '1. chapter-generation skill 的 SKILL.md 和 content-format.md 已经在 init session 里读过，session context 里就有；除非内容不全再 Read 补充，否则直接用 Write 写文件。'
@@ -584,6 +584,17 @@ export function buildChapterPrompt({ index, chapter, projectPath, previousChapte
   // 为什么被判失败，才能针对性修正——否则重试只是原样重跑同一个错误。
   const prevErrorBlock = prevError
     ? `\n上次生成失败原因：${String(prevError).slice(0, 500)}\n请针对性修正后重新生成（若是文件名问题，严格使用下方硬性下发的三个文件名；若上次文件已存在但名字不符，用 Write 按正确文件名重写）。\n`
+    : '';
+  // 连贯性硬要求（Sprint 31 并行生成配套）：session 记忆不再是可靠的跨章
+  // 上下文来源（并行窗口内非首章走 fresh-session；且 session 历史会随章节
+  // 增多被上下文窗口截断），文件才是持久真相。让 agent 生成前必读上一章
+  // 正文与 concepts.json——对串行模式同样是增强。
+  const coherenceBlock = index > 0 && prevChapter
+    ? (() => {
+        const prevMd = generateFilename(index - 1, prevChapter.title);
+        const prevBase = prevMd.replace(/\.md$/, '');
+        return `5. 连贯性硬要求：生成前必读上一章文件 ${JSON.stringify(prevMd)} 和 ${JSON.stringify(`${prevBase}.concepts.json`)}（用 Read 工具）。沿用其术语、译名与记号体系，不要重复讲解其已覆盖的内容；「上一章/前面章节」类衔接语必须与其实际内容相符。\n`;
+      })()
     : '';
   // 文件名由 bridge 单一事实源生成并硬性下发（2026-09-09 实爆：agent 自拟
   // 文件名与 generateFilename 差词序 → existsSync 验收永远失败 → 用户无限重试）。
@@ -607,7 +618,8 @@ ${skillNote}
    - ${baseName}.concepts.json
    文件名由 chapter_title 逐字生成，不要自行改写标题的措辞或字序。
 3. 写完三个文件后，按 SKILL.md 的 MUST-VERIFY checklist 逐项检查，不通过就改。
-4. 三个文件必须都存在且 quiz.json 顶层必须有 \`questions\` 字段（不是空对象、不是其他名字）。`;
+4. 三个文件必须都存在且 quiz.json 顶层必须有 \`questions\` 字段（不是空对象、不是其他名字）。
+${coherenceBlock}`;
 }
 
 export async function generateChapters(queryFnUnused, config, args) {
@@ -629,8 +641,14 @@ export async function generateChapters(queryFnUnused, config, args) {
     indicesToGenerate = allChapters.map((_, i) => i);
   }
 
-  for (let step = 0; step < indicesToGenerate.length; step++) {
-    const i = indicesToGenerate[step];
+  // 并发上限（Sprint 31）：窗口并行生成最多同时跑 2 个 turn，防 API 限流。
+  const PARALLEL_CONCURRENCY = 2;
+
+  // 单章生成（原 for 循环体抽出）。useSession=false 时走 fresh-session：
+  // 同一个 session 文件不能有两个并发写者，所以并行组里只有最低位章节
+  // 续接项目 session，其余章节独立会话（连贯性由 prompt 的必读上一章
+  // 指令保证，见 buildChapterPrompt 的 coherenceBlock）。
+  const runOneChapter = async (i, { useSession }) => {
     const chapter = allChapters[i];
 
     emit('progress', {
@@ -640,18 +658,18 @@ export async function generateChapters(queryFnUnused, config, args) {
       status: 'generating'
     });
 
-    // Fresh-session mode (no session_id): the agent never saw the skill refs,
-    // so inline them into the chapter prompt instead of claiming they're in
-    // session context.
-    const chapterPrompt = (args.session_id ? '' : collectChapterSkillRefs(project_path))
+    // Fresh-session mode: the agent never saw the skill refs, so inline them
+    // into the chapter prompt instead of claiming they're in session context.
+    const chapterPrompt = (useSession ? '' : collectChapterSkillRefs(project_path))
       + buildChapterPrompt({
         index: i,
         chapter,
         projectPath: project_path,
         previousChapters: allChapters.slice(0, i).map((ch) => ch.title),
         courseType: course_type,
-        hasSession: Boolean(args.session_id),
-        prevError: chapterErrors[String(i)] || null
+        hasSession: useSession,
+        prevError: chapterErrors[String(i)] || null,
+        prevChapter: i > 0 ? allChapters[i - 1] : null
       });
 
     try {
@@ -663,7 +681,7 @@ export async function generateChapters(queryFnUnused, config, args) {
         config,
         cwd: project_path,
         tools: ['read', 'write', 'find', 'grep'],
-        sessionId: args.session_id,
+        sessionId: useSession ? args.session_id : null,
         wikiFetch: wikiFetchEnabled,
         onToolLog: () => { /* per user feedback, chapter gen stays silent: progress events suffice */ }
       });
@@ -686,10 +704,6 @@ export async function generateChapters(queryFnUnused, config, args) {
         file: filename,
         title: chapter.title
       });
-
-      if (step < indicesToGenerate.length - 1) {
-        await new Promise(r => setTimeout(r, 500));
-      }
     } catch (e) {
       emit('chapter_failed', {
         index: i,
@@ -697,7 +711,37 @@ export async function generateChapters(queryFnUnused, config, args) {
         error: e.message
       });
     }
+  };
+
+  // 并行调度（Sprint 31）：最低位章节保留 session 续接（项目记忆锚点），
+  // 其余章节 fresh-session 并发。整组进同一个 limit-2 池——窗口 2 章的
+  // 总耗时从 t1 + t2 降到 ≈ max(t1, t2)。每章独立 try/catch，单章失败
+  // 不影响其他章节（错误隔离）。
+  const sorted = [...indicesToGenerate].sort((a, b) => a - b);
+  const jobs = [];
+  if (args.session_id && sorted.length > 0) {
+    const head = sorted[0];
+    jobs.push(() => runOneChapter(head, { useSession: true }));
+    for (const i of sorted.slice(1)) {
+      jobs.push(() => runOneChapter(i, { useSession: false }));
+    }
+  } else {
+    for (const i of sorted) {
+      jobs.push(() => runOneChapter(i, { useSession: false }));
+    }
   }
+
+  let cursor = 0;
+  const workers = Array.from(
+    { length: Math.min(PARALLEL_CONCURRENCY, jobs.length) },
+    async () => {
+      while (cursor < jobs.length) {
+        const job = jobs[cursor++];
+        await job();
+      }
+    }
+  );
+  await Promise.all(workers);
 
   emit('complete', { total_generated: indicesToGenerate.length });
 }
