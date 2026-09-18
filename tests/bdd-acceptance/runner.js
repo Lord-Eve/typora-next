@@ -475,6 +475,16 @@ async function runAcceptanceTests() {
   totalFailed += courseShareResult.failed;
   if (courseShareSteps._cleanup) courseShareSteps._cleanup.call({});
 
+  // 划线批注 UX：就近输入 + 备注标志 + hover 可读（源码契约断言）
+  console.log(`\n${YELLOW}▶ Annotation Notes UX${RESET}`);
+  const annotationNotesSteps = require('./annotation_notes.steps');
+  const annotationNotesResult = await runFeatureFile(
+    path.join(__dirname, '../annotation-notes/features/annotation_notes.feature'),
+    annotationNotesSteps
+  );
+  totalPassed += annotationNotesResult.passed;
+  totalFailed += annotationNotesResult.failed;
+
   if (sprint10Steps._cleanup) sprint10Steps._cleanup.call({});
   if (paperImportSteps._cleanup) paperImportSteps._cleanup.call({});
   if (toolbarTooltipSteps._cleanup) toolbarTooltipSteps._cleanup.call({});

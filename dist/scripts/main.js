@@ -6036,30 +6036,43 @@ window.agentBridge = {
     });
 
     selectionToolbar.querySelector('#annotateBtn').addEventListener('click', async () => {
-      if (!lastAnnotationId) {
-        showToast('请先选择颜色添加高亮或下划线');
-        return;
+      let annotationId = lastAnnotationId;
+
+      if (!annotationId) {
+        // 一步标注：选中文本直接点 💬 = 默认色划线 + 立即打开批注编辑器
+        const selection = window.getSelection();
+        if (!selection || selection.isCollapsed || !selection.toString().trim()) {
+          showToast('请先划线或选中文本');
+          return;
+        }
+        const text = selection.toString().trim();
+        const range = selection.getRangeAt(0);
+        const id = generateId();
+        if (!highlightRange(range, '#ffeb3b', id, currentAnnotationStyle)) return;
+        selection.removeAllRanges();
+        try {
+          const currentPath = state.tabs[state.activeTab]?.path || '';
+          await invoke('add_annotation', {
+            filePath: currentPath,
+            annotation: {
+              id: id,
+              text: text,
+              color: '#ffeb3b',
+              style: currentAnnotationStyle,
+              note: '',
+              createdAt: new Date().toISOString()
+            }
+          });
+        } catch (err) {
+          showError('保存失败: ' + err);
+          return;
+        }
+        annotationId = id;
       }
 
-      const note = prompt('批注内容:', '');
-      if (note === null) return;
-
-      try {
-        const currentPath = state.tabs[state.activeTab]?.path || '';
-        await invoke('update_annotation_note', {
-          filePath: currentPath,
-          id: lastAnnotationId,
-          note: note
-        });
-        // Update DOM tooltip
-        const wrappers = document.querySelectorAll(`[data-annotation-id="${lastAnnotationId}"]`);
-        wrappers.forEach(el => {
-          el.dataset.note = note;
-        });
-        hideSelectionToolbar();
-      } catch (err) {
-        showError('保存批注失败: ' + err);
-      }
+      // 内联批注编辑器定位在划线附近，替代屏幕中央的系统 prompt
+      if (selectionToolbar) selectionToolbar.style.display = 'none';
+      openAnnotationNoteEditor(annotationId);
     });
 
     selectionToolbar.querySelector('#deleteAnnotationBtn').addEventListener('click', async () => {
@@ -6222,6 +6235,8 @@ window.agentBridge = {
 
       let firstWrapper = null;
       for (const textNode of nodesToWrap) {
+        // 跳过纯空白节点（段落间换行），否则空行上留下高亮残片
+        if (!textNode.textContent.trim()) continue;
         const wrapper = document.createElement(tagName);
         wrapper.className = className;
         wrapper.dataset.annotationId = annotationId;
@@ -6237,6 +6252,184 @@ window.agentBridge = {
 
       range.insertNode(contents);
       return firstWrapper;
+    }
+  }
+
+  // 有备注的划线在末尾显示 💬 标志；跨段划线只标最后一个 wrapper
+  function updateNoteMarker(annotationId) {
+    const wrappers = document.querySelectorAll(`[data-annotation-id="${annotationId}"]`);
+    if (wrappers.length === 0) return;
+    const note = wrappers[0].dataset.note || '';
+    wrappers.forEach(el => el.classList.remove('has-note'));
+    if (note) {
+      wrappers[wrappers.length - 1].classList.add('has-note');
+    }
+  }
+
+  // 批注按条目渲染成单元格：首条 + 每条「—— MM-DD 追加 ——」分隔的追加条目
+  function renderNoteEntries(container, note) {
+    container.innerHTML = '';
+    const parts = note.split(/\n+—— (\d{2}-\d{2}) 追加 ——\n/);
+    const entries = [];
+    const first = (parts[0] || '').trim();
+    if (first) entries.push({ date: '', text: first });
+    for (let i = 1; i < parts.length; i += 2) {
+      const text = (parts[i + 1] || '').trim();
+      if (text) entries.push({ date: parts[i], text });
+    }
+    if (entries.length === 0) entries.push({ date: '', text: note });
+
+    for (const entry of entries) {
+      const cell = document.createElement('div');
+      cell.className = 'note-entry';
+      if (entry.date) {
+        const badge = document.createElement('div');
+        badge.className = 'note-entry-date';
+        badge.textContent = entry.date;
+        cell.appendChild(badge);
+      }
+      const body = document.createElement('div');
+      body.className = 'note-entry-text';
+      body.textContent = entry.text;
+      cell.appendChild(body);
+      container.appendChild(cell);
+    }
+  }
+
+  let annotationNoteEditor = null;
+
+  function ensureAnnotationNoteEditor() {
+    if (annotationNoteEditor) return;
+    annotationNoteEditor = document.createElement('div');
+    annotationNoteEditor.className = 'annotation-note-editor';
+    annotationNoteEditor.innerHTML = `
+      <div class="note-editor-existing" style="display:none"></div>
+      <textarea placeholder="批注内容…"></textarea>
+      <div class="note-editor-footer">
+        <span class="note-editor-hint">Ctrl+Enter 保存 · Esc 取消</span>
+        <div class="note-editor-actions">
+          <button data-action="edit" style="display:none">编辑</button>
+          <button data-action="save">保存</button>
+          <button data-action="cancel">取消</button>
+        </div>
+      </div>`;
+    document.body.appendChild(annotationNoteEditor);
+
+    const textarea = annotationNoteEditor.querySelector('textarea');
+    textarea.addEventListener('keydown', (e) => {
+      if (e.ctrlKey && e.key === 'Enter') {
+        e.preventDefault();
+        saveAnnotationNote();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        closeAnnotationNoteEditor();
+      }
+    });
+    // 「编辑」：从追加模式切回整体编辑（旧备注原文灌入 textarea）
+    annotationNoteEditor.querySelector('[data-action="edit"]').addEventListener('click', () => {
+      textarea.value = annotationNoteEditor._existingNote || '';
+      annotationNoteEditor.querySelector('.note-editor-existing').style.display = 'none';
+      annotationNoteEditor._mode = 'edit';
+      textarea.placeholder = '批注内容…';
+      textarea.focus();
+    });
+    annotationNoteEditor.querySelector('[data-action="save"]').addEventListener('click', saveAnnotationNote);
+    annotationNoteEditor.querySelector('[data-action="cancel"]').addEventListener('click', closeAnnotationNoteEditor);
+
+    // 点击编辑器外部：关闭但不改数据
+    document.addEventListener('mousedown', (e) => {
+      if (annotationNoteEditor.style.display !== 'none' && !annotationNoteEditor.contains(e.target)) {
+        closeAnnotationNoteEditor();
+      }
+    });
+  }
+
+  function openAnnotationNoteEditor(annotationId) {
+    const wrapper = document.querySelector(`[data-annotation-id="${annotationId}"]`);
+    if (!wrapper) return;
+    ensureAnnotationNoteEditor();
+    // 固化正在编辑的批注 id——全局 mouseup/mousedown 会清掉 lastAnnotationId，保存不能依赖它
+    annotationNoteEditor._annotationId = annotationId;
+
+    const textarea = annotationNoteEditor.querySelector('textarea');
+    const existingBlock = annotationNoteEditor.querySelector('.note-editor-existing');
+    const editBtn = annotationNoteEditor.querySelector('[data-action="edit"]');
+    const existingNote = wrapper.dataset.note || '';
+    annotationNoteEditor._existingNote = existingNote;
+    if (existingNote) {
+      // 追加模式：旧备注按条目单元格只读展示，textarea 只写新增内容
+      annotationNoteEditor._mode = 'append';
+      renderNoteEntries(existingBlock, existingNote);
+      existingBlock.style.display = 'block';
+      editBtn.style.display = '';
+      textarea.value = '';
+      textarea.placeholder = '追加批注…';
+    } else {
+      annotationNoteEditor._mode = 'new';
+      existingBlock.style.display = 'none';
+      editBtn.style.display = 'none';
+      textarea.value = '';
+      textarea.placeholder = '批注内容…';
+    }
+    annotationNoteEditor.style.display = 'flex';
+
+    // 定位在划线附近：下方优先，空间不足放上方，左右 clamp 进视口
+    const rect = wrapper.getBoundingClientRect();
+    const editorRect = annotationNoteEditor.getBoundingClientRect();
+    let top = rect.bottom + 6;
+    if (top + editorRect.height > window.innerHeight - 8) {
+      top = Math.max(8, rect.top - editorRect.height - 6);
+    }
+    const left = Math.max(8, Math.min(rect.left, window.innerWidth - editorRect.width - 8));
+    annotationNoteEditor.style.top = top + 'px';
+    annotationNoteEditor.style.left = left + 'px';
+
+    textarea.focus();
+  }
+
+  function closeAnnotationNoteEditor() {
+    if (annotationNoteEditor) annotationNoteEditor.style.display = 'none';
+    lastAnnotationId = null;
+  }
+
+  async function saveAnnotationNote() {
+    if (!annotationNoteEditor) return;
+    const annotationId = annotationNoteEditor._annotationId;
+    if (!annotationId) {
+      closeAnnotationNoteEditor();
+      return;
+    }
+    const input = annotationNoteEditor.querySelector('textarea').value;
+
+    let note;
+    if (annotationNoteEditor._mode === 'append') {
+      const existingNote = annotationNoteEditor._existingNote || '';
+      const added = input.trim();
+      if (!added) {
+        closeAnnotationNoteEditor();
+        return;
+      }
+      const stamp = new Date().toISOString().slice(5, 10);
+      note = existingNote + '\n\n—— ' + stamp + ' 追加 ——\n' + added;
+    } else {
+      note = input;
+    }
+
+    try {
+      const currentPath = state.tabs[state.activeTab]?.path || '';
+      await invoke('update_annotation_note', {
+        filePath: currentPath,
+        id: annotationId,
+        note: note
+      });
+      const wrappers = document.querySelectorAll(`[data-annotation-id="${annotationId}"]`);
+      wrappers.forEach(el => {
+        el.dataset.note = note;
+      });
+      updateNoteMarker(annotationId);
+      closeAnnotationNoteEditor();
+    } catch (err) {
+      showError('保存批注失败: ' + err);
     }
   }
 
@@ -6263,6 +6456,7 @@ window.agentBridge = {
         wrappers.forEach(el => {
           if (ann.note) el.dataset.note = ann.note;
         });
+        updateNoteMarker(ann.id);
       }
     } catch (err) {
       // silently fail
@@ -6307,11 +6501,18 @@ window.agentBridge = {
       if (!el) return;
       const note = el.dataset.note;
       if (!note) return;
-      annotationTooltip.textContent = note;
+      renderNoteEntries(annotationTooltip, note);
       annotationTooltip.style.display = 'block';
       const rect = el.getBoundingClientRect();
-      annotationTooltip.style.left = rect.left + 'px';
-      annotationTooltip.style.top = (rect.bottom + 6) + 'px';
+      // 下方优先，空间不足放上方；左右 clamp 进视口
+      const tipRect = annotationTooltip.getBoundingClientRect();
+      let top = rect.bottom + 6;
+      if (top + tipRect.height > window.innerHeight - 8) {
+        top = Math.max(8, rect.top - tipRect.height - 6);
+      }
+      const left = Math.max(8, Math.min(rect.left, window.innerWidth - tipRect.width - 8));
+      annotationTooltip.style.left = left + 'px';
+      annotationTooltip.style.top = top + 'px';
     }, true);
 
     elements.markdownBody.addEventListener('mouseleave', (e) => {
@@ -6336,6 +6537,10 @@ window.agentBridge = {
     ensureAnnotationTooltip();
 
     document.addEventListener('mouseup', (e) => {
+      // 批注编辑器内的点击：不参与划词逻辑（否则会 hideSelectionToolbar 清掉 lastAnnotationId）
+      if (annotationNoteEditor && annotationNoteEditor.contains(e.target)) {
+        return;
+      }
       // When clicking on an annotation, click handler shows toolbar; don't hide it here
       if (e.target.closest('.annotation-highlight, .annotation-underline')) {
         return;
@@ -6366,6 +6571,10 @@ window.agentBridge = {
     });
 
     document.addEventListener('mousedown', (e) => {
+      // 批注编辑器内的点击：不碰划词工具栏状态（编辑器自带点外部关闭逻辑）
+      if (annotationNoteEditor && annotationNoteEditor.contains(e.target)) {
+        return;
+      }
       if (selectionToolbar && !selectionToolbar.contains(e.target)) {
         // Don't hide when clicking on an annotation element (will show toolbar for editing)
         if (e.target.closest('.annotation-highlight, .annotation-underline')) {
