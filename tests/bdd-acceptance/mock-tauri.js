@@ -46,6 +46,18 @@ const mockInvoke = async (cmd, args) => {
       return _caseStudySaveSession(args);
     case 'case_study_list_sessions':
       return _caseStudyListSessions(args);
+    case 'own_voice_chat':
+      return _ownVoiceChat(args);
+    case 'own_voice_save_session':
+      return _ownVoiceSaveSession(args);
+    case 'own_voice_list_sessions':
+      return _ownVoiceListSessions(args);
+    case 'explain_selection':
+      return _explainSelection(args);
+    case 'persist_explanation':
+      return _persistExplanation(args);
+    case 'list_project_explanations':
+      return _listProjectExplanations(args);
     case 'generate_review_content':
       return _generateReviewContent(args);
     case 'init_review_schedule':
@@ -357,6 +369,105 @@ function _caseStudyListSessions({ projectPath }) {
   return sessions;
 }
 
+// ============================================
+// AI 伴学（我有话说）
+// ============================================
+
+let _ownVoiceChatCalls = [];
+function _ownVoiceChat(args) {
+  _ownVoiceChatCalls.push(args);
+  const isFirst = !!args.firstTurn;
+  return {
+    content: isFirst
+      ? `✅ 你说对的部分\n${args.userAnswer} 的方向是对的。\n\n⚠️ 需要修正\n其中「${args.selectedText || '概念'}」的表述要修正。\n\n❓ 反问\n你能举一个具体例子吗？`
+      : `针对你的补充回应：${args.userAnswer}`,
+    done: false,
+    session_id: args.sessionId || 'mock-own-voice-session-1'
+  };
+}
+function _getOwnVoiceChatCalls() { return _ownVoiceChatCalls; }
+
+function _ownVoiceSaveSession({ projectPath, session, overwriteFile }) {
+  const sessionsDir = path.join(projectPath, '.learning', 'own-voices');
+  fs.mkdirSync(sessionsDir, { recursive: true });
+  const ts = (session.ended_at || new Date().toISOString()).replace(/[:.]/g, '-');
+  const fileName = overwriteFile || `${ts}.json`;
+  const filePath = path.join(sessionsDir, fileName);
+  fs.writeFileSync(filePath, JSON.stringify(session, null, 2), 'utf-8');
+  return filePath;
+}
+
+function _ownVoiceListSessions({ projectPath }) {
+  const sessionsDir = path.join(projectPath, '.learning', 'own-voices');
+  if (!fs.existsSync(sessionsDir)) return [];
+  const sessions = [];
+  for (const f of fs.readdirSync(sessionsDir)) {
+    if (!f.endsWith('.json')) continue;
+    try {
+      const s = JSON.parse(fs.readFileSync(path.join(sessionsDir, f), 'utf-8'));
+      s.file = f; // 会话身份：续聊时回传给 save 以覆盖原文件
+      sessions.push(s);
+    } catch (_) { /* skip broken */ }
+  }
+  sessions.sort((a, b) => String(b.ended_at || '').localeCompare(String(a.ended_at || '')));
+  return sessions;
+}
+
+// ============================================
+// 解释记录（.learning/explanations/{chapter_stem}/{cue_id}.json）
+// ============================================
+
+let _explainSelectionCalls = [];
+function _explainSelection(args) {
+  _explainSelectionCalls.push(args);
+  return {
+    explanation: `解释：${args.text}（第 ${(args.previousQa || []).length + 1} 轮）`,
+    suggested_questions: ['再举个例子', '为什么是这样', '有什么应用场景']
+  };
+}
+function _getExplainSelectionCalls() { return _explainSelectionCalls; }
+
+function _chapterStem(chapter) {
+  return String(chapter || '').replace(/\.[^./\\]+$/, '');
+}
+
+function _persistExplanation({ projectPath, chapter, conversation }) {
+  const dir = path.join(projectPath, '.learning', 'explanations', _chapterStem(chapter));
+  fs.mkdirSync(dir, { recursive: true });
+  const filePath = path.join(dir, `${conversation.id}.json`);
+  fs.writeFileSync(filePath, JSON.stringify(conversation, null, 2), 'utf-8');
+  return filePath;
+}
+
+/** 扫 .learning/explanations/{章节}/{cue}.json，拍平标注 chapter，新→旧（对齐 Rust 实现） */
+function _listProjectExplanations({ projectPath }) {
+  const root = path.join(projectPath, '.learning', 'explanations');
+  if (!fs.existsSync(root)) return [];
+  const items = [];
+  for (const chapter of fs.readdirSync(root)) {
+    const chapterDir = path.join(root, chapter);
+    if (!fs.statSync(chapterDir).isDirectory()) continue;
+    for (const f of fs.readdirSync(chapterDir)) {
+      if (!f.endsWith('.json')) continue;
+      try {
+        const conv = JSON.parse(fs.readFileSync(path.join(chapterDir, f), 'utf-8'));
+        items.push({
+          id: conv.id,
+          selected_text: conv.selected_text,
+          chapter: chapter,
+          rounds: (conv.qa_history || []).length,
+          created_at: conv.created_at,
+          last_ts: conv.qa_history && conv.qa_history.length
+            ? conv.qa_history[conv.qa_history.length - 1].ts : '',
+          qa_history: conv.qa_history
+        });
+      } catch (_) { /* 损坏文件跳过 */ }
+    }
+  }
+  items.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+  return items;
+}
+
 function _socraticLoadState({ projectPath }) {
   const statePath = path.join(projectPath, '.learning', 'socratic-state.json');
   if (!fs.existsSync(statePath)) {
@@ -636,12 +747,13 @@ const mockEvent = {
 // ============================================
 // Assemble window.__TAURI__
 // ============================================
-global.window.__TAURI__ = {
+const mockTauriApi = {
   core: { invoke: mockInvoke },
   fs: mockFS,
   path: mockPath,
   event: mockEvent
 };
+global.window.__TAURI__ = mockTauriApi;
 
 // Also expose for convenience
 module.exports = {
@@ -652,5 +764,9 @@ module.exports = {
     handlers.forEach(h => h({ payload }));
   },
   getCaseStudyChatCalls: () => _getCaseStudyChatCalls(),
-  mockInvoke
+  getOwnVoiceChatCalls: () => _getOwnVoiceChatCalls(),
+  getExplainSelectionCalls: () => _getExplainSelectionCalls(),
+  mockInvoke,
+  // 后装载的 steps 套件若被更早的套件整替换过 global.window，用它重新挂载
+  tauriApi: mockTauriApi
 };

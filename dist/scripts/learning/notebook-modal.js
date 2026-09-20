@@ -75,6 +75,8 @@
 
     get chatEl() { return this._chatEl; }
     get inputEl() { return this._inputEl; }
+    /** 卡片根元素：引擎需要往输入区注入自定义控件时用（如 AI 伴学的模式切换） */
+    get cardEl() { return this._card; }
 
     /** 构建 DOM 并挂载到 body */
     render() {

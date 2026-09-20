@@ -67,7 +67,7 @@ function setupEnv() {
   body.appendChild(mdBody);
 
   const aiBtn = document.createElement('button');
-  aiBtn._attrs.id = 'aiExplainBtn';
+  aiBtn._attrs.id = 'aiCompanionBtn';
   body.appendChild(aiBtn);
 }
 

@@ -10,7 +10,7 @@ mod case_study_store;
 
 use case_study_store::{
     default_session_file_name, list_sessions, resolve_session_file_name,
-    sanitize_session_file_name, save_session, sessions_dir,
+    sanitize_session_file_name, save_session, sessions_dir, sessions_dir_kind,
 };
 use serde_json::json;
 use std::fs;
@@ -96,7 +96,7 @@ fn save_creates_new_file_named_by_ended_at() {
     let path = root.to_str().unwrap();
     let s = session("2026-08-11T09:00:00", 2);
 
-    let written = save_session(path, &s, None).unwrap();
+    let written = save_session(path, "case-studies", &s, None).unwrap();
     assert_eq!(
         written.file_name().unwrap().to_str().unwrap(),
         "2026-08-11T09-00-00.json"
@@ -110,11 +110,11 @@ fn resume_overwrites_the_same_file_without_duplicating_history() {
     let path = root.to_str().unwrap();
 
     let first = session("2026-08-11T09:00:00", 2);
-    save_session(path, &first, None).unwrap();
+    save_session(path, "case-studies", &first, None).unwrap();
 
     // 续聊：沿用原文件名，内容变成 4 轮、ended_at 换新
     let resumed = session("2026-09-17T10:00:00", 4);
-    save_session(path, &resumed, Some("2026-08-11T09-00-00.json")).unwrap();
+    save_session(path, "case-studies", &resumed, Some("2026-08-11T09-00-00.json")).unwrap();
 
     let files: Vec<_> = fs::read_dir(sessions_dir(path))
         .unwrap()
@@ -123,7 +123,7 @@ fn resume_overwrites_the_same_file_without_duplicating_history() {
         .collect();
     assert_eq!(files.len(), 1, "续聊必须覆盖原文件，不得新增重复条目");
 
-    let listed = list_sessions(path).unwrap();
+    let listed = list_sessions(path, "case-studies").unwrap();
     assert_eq!(listed.len(), 1);
     assert_eq!(
         listed[0]["turns"].as_array().unwrap().len(),
@@ -137,11 +137,11 @@ fn list_injects_file_identity_and_sorts_newest_first() {
     let root = tmp_dir("list_identity");
     let path = root.to_str().unwrap();
 
-    save_session(path, &session("2026-08-10T10:00:00", 1), None).unwrap();
-    save_session(path, &session("2026-08-12T10:00:00", 1), None).unwrap();
-    save_session(path, &session("2026-08-11T10:00:00", 1), None).unwrap();
+    save_session(path, "case-studies", &session("2026-08-10T10:00:00", 1), None).unwrap();
+    save_session(path, "case-studies", &session("2026-08-12T10:00:00", 1), None).unwrap();
+    save_session(path, "case-studies", &session("2026-08-11T10:00:00", 1), None).unwrap();
 
-    let listed = list_sessions(path).unwrap();
+    let listed = list_sessions(path, "case-studies").unwrap();
     assert_eq!(listed.len(), 3);
 
     // 新→旧
@@ -172,16 +172,65 @@ fn list_injects_file_identity_and_sorts_newest_first() {
 fn list_of_missing_dir_is_empty_not_error() {
     let root = tmp_dir("list_missing");
     let path = root.join("nope");
-    assert!(list_sessions(path.to_str().unwrap()).unwrap().is_empty());
+    assert!(list_sessions(path.to_str().unwrap(), "case-studies").unwrap().is_empty());
 }
 
 #[test]
 fn broken_json_is_skipped_without_failing_the_list() {
     let root = tmp_dir("list_broken");
     let path = root.to_str().unwrap();
-    save_session(path, &session("2026-08-11T10:00:00", 1), None).unwrap();
+    save_session(path, "case-studies", &session("2026-08-11T10:00:00", 1), None).unwrap();
     fs::write(sessions_dir(path).join("broken.json"), "{ not json").unwrap();
 
-    let listed = list_sessions(path).unwrap();
+    let listed = list_sessions(path, "case-studies").unwrap();
     assert_eq!(listed.len(), 1, "损坏文件应跳过而不是让整个列表失败");
+}
+
+// ============================================
+// 场景隔离（own-voices / case-studies）
+// ============================================
+#[test]
+fn kinds_are_stored_in_separate_directories() {
+    let root = tmp_dir("kind_isolation");
+    let path = root.to_str().unwrap();
+
+    save_session(path, "case-studies", &session("2026-08-11T10:00:00", 2), None).unwrap();
+    save_session(path, "own-voices", &session("2026-08-11T11:00:00", 3), None).unwrap();
+
+    // 各自目录各一条，互不混放
+    assert_eq!(list_sessions(path, "case-studies").unwrap().len(), 1);
+    assert_eq!(list_sessions(path, "own-voices").unwrap().len(), 1);
+    assert!(sessions_dir_kind(path, "own-voices").ends_with("own-voices"));
+
+    // 列表按 kind 读取：case-studies 里看不到 own-voices 的内容
+    let case_only = list_sessions(path, "case-studies").unwrap();
+    assert_eq!(
+        case_only[0]["ended_at"].as_str().unwrap(),
+        "2026-08-11T10:00:00"
+    );
+}
+
+#[test]
+fn own_voice_resume_overwrites_within_its_own_kind() {
+    let root = tmp_dir("own_voice_resume");
+    let path = root.to_str().unwrap();
+
+    save_session(path, "own-voices", &session("2026-08-11T09:00:00", 2), None).unwrap();
+    save_session(
+        path,
+        "own-voices",
+        &session("2026-09-17T10:00:00", 5),
+        Some("2026-08-11T09-00-00.json"),
+    )
+    .unwrap();
+
+    let files: Vec<_> = fs::read_dir(sessions_dir_kind(path, "own-voices"))
+        .unwrap()
+        .flatten()
+        .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("json"))
+        .collect();
+    assert_eq!(files.len(), 1, "own-voices 续聊同样必须覆盖原文件");
+
+    let listed = list_sessions(path, "own-voices").unwrap();
+    assert_eq!(listed[0]["turns"].as_array().unwrap().len(), 5);
 }

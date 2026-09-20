@@ -25,8 +25,8 @@ function extractRustCommands() {
   const commands = [];
   if (handlerMatch) {
     handlerMatch[1].split(/,|\n/).forEach(line => {
-      // Handle both "command_name" and "ai_agent::command_name"
-      const m = line.trim().match(/^(?:ai_agent::)?([a-z_][a-z_0-9]*)$/);
+      // Handle module-qualified names ("ai_agent::x" / "mac_pdf::x") and plain "command_name"
+      const m = line.trim().match(/^(?:[a-z_][a-z_0-9]*::)?([a-z_][a-z_0-9]*)$/);
       if (m) commands.push(m[1]);
     });
   }
@@ -42,7 +42,7 @@ function extractRustCommands() {
 }
 
 function extractJsInvokes() {
-  const scriptsDir = path.join(__dirname, '../../dist/scripts');
+  const scriptsDir = path.join(__dirname, '../../../dist/scripts');
   const invokes = new Map(); // command -> [{file, line}]
 
   function scanDir(dir) {
@@ -57,6 +57,8 @@ function extractJsInvokes() {
           const matches = line.matchAll(/invoke\s*\(\s*['"`]([^'"`]+)['"`]/g);
           for (const m of matches) {
             const cmd = m[1];
+            // Tauri 插件命令（plugin:xxx|yyy）不走 generate_handler 注册，不属于本契约
+            if (cmd.startsWith('plugin:')) continue;
             if (!invokes.has(cmd)) invokes.set(cmd, []);
             invokes.get(cmd).push({ file: path.relative(process.cwd(), fullPath), line: idx + 1 });
           }
@@ -99,15 +101,14 @@ const COMMAND_REGISTRY = {
 
   // Sprint 3 learning commands (high risk, full check)
   create_learning_project: {
-    category: 'learning',
-    jsParams: ['projectPath', 'outline', 'goal'],
-    rustFile: 'lib.rs',
+    category: 'unused',
+    note: 'Superseded by setup_project_with_session (atomic create + init session)',
   },
   plan_course: {
-    category: 'learning',
-    jsParams: ['goal', 'level', 'hours'],
-    rustFile: 'ai_agent.rs',
+    category: 'unused',
+    note: 'Superseded by plan_course_llm (synchronous LLM call)',
   },
+  export_pdf: { category: 'core' },
   plan_course_llm: {
     // Phase A: synchronous LLM call (replaces plan_course Agent SDK path)
     category: 'learning',
@@ -129,6 +130,22 @@ const COMMAND_REGISTRY = {
     category: 'learning',
     jsParams: ['text', 'context', 'previousQa'],
     rustFile: 'ai_agent.rs',
+  },
+  own_voice_chat: {
+    // AI 伴学「我有话说」——面板自由发言/表达理解，session 续聊 + 流式
+    category: 'learning',
+    jsParams: ['projectPath', 'selectedText', 'context', 'userAnswer', 'firstTurn', 'sessionId'],
+    rustFile: 'ai_agent.rs',
+  },
+  own_voice_save_session: {
+    category: 'learning',
+    jsParams: ['projectPath', 'session', 'overwriteFile'],
+    rustFile: 'lib.rs',
+  },
+  own_voice_list_sessions: {
+    category: 'learning',
+    jsParams: ['projectPath'],
+    rustFile: 'lib.rs',
   },
   generate_chapter_quiz: {
     category: 'learning',
@@ -191,7 +208,7 @@ TestRunner.test('All learning-category commands have JS callers', () => {
 });
 
 TestRunner.test('persist_quiz_result payload includes all required fields', () => {
-  const miPath = path.join(__dirname, '../../dist/scripts/learning/mode-integration.js');
+  const miPath = path.join(__dirname, '../../../dist/scripts/learning/mode-integration.js');
   const contexts = findPayloadNearInvoke(miPath, 'persist_quiz_result');
 
   TestRunner.assert(contexts.length > 0, 'Should find persist_quiz_result invoke in mode-integration.js');
@@ -208,7 +225,7 @@ TestRunner.test('persist_quiz_result payload includes all required fields', () =
 });
 
 TestRunner.test('explain_selection payload includes all required fields', () => {
-  const miPath = path.join(__dirname, '../../dist/scripts/learning/mode-integration.js');
+  const miPath = path.join(__dirname, '../../../dist/scripts/learning/mode-integration.js');
   const contexts = findPayloadNearInvoke(miPath, 'explain_selection');
 
   TestRunner.assert(contexts.length > 0, 'Should find explain_selection invoke in mode-integration.js');
@@ -225,7 +242,7 @@ TestRunner.test('explain_selection payload includes all required fields', () => 
 });
 
 TestRunner.test('generate_chapter_quiz payload includes required field', () => {
-  const miPath = path.join(__dirname, '../../dist/scripts/learning/mode-integration.js');
+  const miPath = path.join(__dirname, '../../../dist/scripts/learning/mode-integration.js');
   const contexts = findPayloadNearInvoke(miPath, 'generate_chapter_quiz');
 
   TestRunner.assert(contexts.length > 0, 'Should find generate_chapter_quiz invoke in mode-integration.js');
@@ -237,19 +254,19 @@ TestRunner.test('generate_chapter_quiz payload includes required field', () => {
   );
 });
 
-TestRunner.test('create_learning_project payload includes required fields', () => {
-  const pmPath = path.join(__dirname, '../../dist/scripts/learning/project-manager.js');
-  const contexts = findPayloadNearInvoke(pmPath, 'create_learning_project');
+TestRunner.test('setup_project_with_session payload includes required fields', () => {
+  const pmPath = path.join(__dirname, '../../../dist/scripts/learning/project-manager.js');
+  const contexts = findPayloadNearInvoke(pmPath, 'setup_project_with_session');
 
-  TestRunner.assert(contexts.length > 0, 'Should find create_learning_project invoke');
+  TestRunner.assert(contexts.length > 0, 'Should find setup_project_with_session invoke');
 
-  const required = COMMAND_REGISTRY.create_learning_project.jsParams;
+  const required = COMMAND_REGISTRY.setup_project_with_session.jsParams;
   const combined = contexts.join('\n');
 
   for (const key of required) {
     TestRunner.assert(
       combined.includes(key),
-      `create_learning_project payload should include '${key}'`
+      `setup_project_with_session payload should include '${key}'`
     );
   }
 });
@@ -283,7 +300,7 @@ TestRunner.test('Unused commands are documented in registry', () => {
 TestRunner.test('camelCase to snake_case field coverage for persist_quiz_result', () => {
   // Sprint 3 bug: Rust expects snake_case but JS sends camelCase.
   // Tauri auto-converts, but we should document which fields are affected.
-  const miPath = path.join(__dirname, '../../dist/scripts/learning/mode-integration.js');
+  const miPath = path.join(__dirname, '../../../dist/scripts/learning/mode-integration.js');
   const content = fs.readFileSync(miPath, 'utf-8');
 
   // Find the payload object definition near persist_quiz_result

@@ -90,15 +90,21 @@ pub fn apply_template(docx_bytes: &[u8], template_path: &Path) -> Result<Vec<u8>
 /// Max display width for a Mermaid/SVG diagram inside a Word document, in CSS
 /// pixels. Matches `docx_export::MAX_IMAGE_WIDTH_PX` so the diagram fills the
 /// page body without overflowing.
-pub const DOCX_MERMAID_MAX_WIDTH_PX: u32 = 540;
+pub const DOCX_MERMAID_MAX_WIDTH_PX: u32 = 566;
+
+/// Max display height for a Mermaid/SVG diagram, matching
+/// `docx_export::MAX_IMAGE_HEIGHT_PX`. A `flowchart TB` is tall and narrow:
+/// scaling one to the body *width* multiplies its height well past the page, so
+/// the height bound is what actually governs portrait diagrams.
+pub const DOCX_MERMAID_MAX_HEIGHT_PX: u32 = 800;
 
 /// Render an SVG diagram to a high-resolution PNG suitable for Word export.
 ///
-/// The returned `MermaidImage` uses `DOCX_MERMAID_MAX_WIDTH_PX` as the target
-/// display width (so small intrinsic SVG viewBoxes are scaled up to fill the
-/// page) while the PNG itself is rendered at `RENDER_SCALE` × that size for
-/// crisp output. Height is kept proportional to the SVG's intrinsic aspect
-/// ratio.
+/// The returned `MermaidImage` is scaled to fit the body box — small intrinsic
+/// SVG viewBoxes grow to fill it, wide ones are capped by
+/// `DOCX_MERMAID_MAX_WIDTH_PX` and tall ones by `DOCX_MERMAID_MAX_HEIGHT_PX` —
+/// while the PNG itself is rendered at `RENDER_SCALE` × that size for crisp
+/// output. Aspect ratio is preserved throughout.
 pub fn render_svg_to_mermaid_image(svg: &str) -> Result<docx_export::MermaidImage, String> {
     const RENDER_SCALE: f32 = 3.0;
 
@@ -115,9 +121,12 @@ pub fn render_svg_to_mermaid_image(svg: &str) -> Result<docx_export::MermaidImag
         return Err("SVG has zero size".to_string());
     }
 
-    // Target display size in Word (CSS pixels).
-    let display_width = DOCX_MERMAID_MAX_WIDTH_PX;
-    let display_height = ((display_width as f32) * original_height / original_width).round() as u32;
+    // Target display size in Word (CSS pixels): fit the body box on both axes,
+    // so a wide diagram is capped by width and a tall one by height.
+    let scale = (DOCX_MERMAID_MAX_WIDTH_PX as f32 / original_width)
+        .min(DOCX_MERMAID_MAX_HEIGHT_PX as f32 / original_height);
+    let display_width = (original_width * scale).round().max(1.0) as u32;
+    let display_height = (original_height * scale).round().max(1.0) as u32;
 
     // High-resolution pixmap for crisp printing.
     let target_width = ((display_width as f32) * RENDER_SCALE).round() as u32;

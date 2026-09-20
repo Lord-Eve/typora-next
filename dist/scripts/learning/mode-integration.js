@@ -32,11 +32,9 @@
   let _cornellSidebarEl = null;      // sidebar DOM element
   let _cornellCueIdCounter = 0;      // cue ID counter
   let _cornellCues = [];             // cue data array
-  let _selectionChangeHandler = null; // bound selectionchange handler
   let _currentChapterTitle = '';     // current chapter title for context
   let _currentChapterFile = '';      // current chapter file path (for persistence)
   let _lastChapterFileForSidebar = ''; // detect chapter switch
-  let _pendingSelectedText = '';     // selected text waiting for user to trigger cue
   // Note: extra questions are now persisted to disk (.learning/extras/*.json)
   // and loaded on demand — no in-memory cache needed.
 
@@ -568,6 +566,30 @@
   }
 
   /**
+   * 渲染「本题讨论的对象」——该 cue 的划选原文（可能是公式、表格或代码）。
+   *
+   * 单行按引用条呈现；多行按代码块呈现（等宽 + 保留缩进）。两种都用 pre-wrap，
+   * 否则代码里的连续空格会被 HTML 折叠掉（`gp:hasUnit      gp:Gram ;`）。
+   * 内容来自用户划选，含 < > & 等字符，必须转义后再进 innerHTML。
+   */
+  function renderExtraContext(context) {
+    const text = (context || '').trim();
+    if (!text) return '';
+
+    const isMultiline = text.includes('\n');
+    const style = isMultiline
+      ? 'font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:12px;' +
+        'line-height:1.6; max-height:220px; overflow:auto;'
+      : 'font-size:13px; line-height:1.6;';
+
+    return `
+      <div style="margin-bottom:12px; padding:10px 12px; background:#f8fafc;
+                  border-left:3px solid #c4b5fd; border-radius:0 8px 8px 0;
+                  color:#475569; white-space:pre-wrap; word-break:break-word; ${style}">${escapeHtml(text)}</div>
+    `;
+  }
+
+  /**
    * Show a lightweight self-check modal for extra questions.
    * Clicking an option immediately shows correct/incorrect — no submission, no rating.
    */
@@ -625,7 +647,13 @@
         border: 1px solid #ddd6fe; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
       `;
 
+      // 题干可能说「关于这段…查询」，指代的对象（划选的原文/代码）必须同屏可见，
+      // 否则题目不可作答——弹窗里只有题干和选项，没有章节正文可参照。
+      // 本 cue 的划选内容由后端从解释文件带出（QuizQuestion.context）。
+      const contextHtml = renderExtraContext(q.context);
+
       const questionHtml = `
+        ${contextHtml}
         <div style="font-size:14px;font-weight:600;color:#1f2937;margin-bottom:12px;line-height:1.5;">
           <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;background:#ede9fe;border-radius:5px;color:#7c3aed;font-size:12px;margin-right:8px;">${idx + 1}</span>
           ${q.question}
@@ -1297,40 +1325,37 @@
     const sidebar = document.getElementById('cornellSidebar');
     if (!sidebar) { console.warn('cornellSidebar element not found'); return; }
 
+    // 伴学记录整合后侧栏瘦身：cue 卡片列表撤掉（解释/举例/我有话说统一进伴学记录），
+    // 只留章节信息 + 两个入口按钮
     _cornellSidebarEl = sidebar;
     sidebar.style.display = '';
     sidebar.innerHTML = `
       <div class="cornell-sidebar-header">
         <h4>本章要点</h4>
-        <div class="info" id="cornellSidebarInfo">📖 尚未选词</div>
-        <div class="meta" id="cornellSidebarMeta">还没有 cue</div>
+        <div class="info" id="cornellSidebarInfo">📖 本章</div>
+        <div class="meta" id="cornellSidebarMeta">还没有要点</div>
       </div>
       <div class="cornell-sidebar-actions">
-        <button class="cornell-footer-btn" id="caseStudyBtn">📋 案例研习记录</button>
+        <button class="cornell-footer-btn cornell-footer-btn-primary" id="ownVoiceBtn">💬 我有话说</button>
+        <button class="cornell-footer-btn" id="companionHistoryBtn">🕘 伴学记录</button>
       </div>
-      <div class="cornell-sidebar-body" id="cornellSidebarBody">
-        <div class="cornell-cue-empty" id="cornellEmptyState">
-          <div class="icon">📌</div>
-          选中正文中的文字<br>点击上方按钮解释或生成案例<br><br>
-          <span style="font-size:10px;color:#6b7280;">例：选中"位置编码"<br>→ 点 💡 解释 / 📋 案例研习</span>
-        </div>
-      </div>
-      <div class="cornell-sidebar-footer" id="cornellSidebarFooter">💡 选中文字后可解释或生成案例</div>
+      <div class="cornell-sidebar-footer" id="cornellSidebarFooter">✨ 划词伴学 · 或直接「我有话说」</div>
     `;
 
-    // 案例研习记录入口（UX 修正：新建案例只在划词气泡原地触发，
-    // 侧栏按钮 = 纯历史回看；解释走划词气泡 🤖 / cue 卡片）
-    const caseStudyBtn = document.getElementById('caseStudyBtn');
-    if (caseStudyBtn) {
-      caseStudyBtn.addEventListener('click', () => {
-        if (window.CaseStudyModal) window.CaseStudyModal.openHistory(_projectPath);
+    // 「我有话说」不划词直达 AI 伴学面板（自由发言入口）
+    const ownVoiceBtn = document.getElementById('ownVoiceBtn');
+    if (ownVoiceBtn) {
+      ownVoiceBtn.addEventListener('click', () => {
+        openAICompanion('', 'talk');
       });
     }
 
-    // Bind selectionchange
-    if (!_selectionChangeHandler) {
-      _selectionChangeHandler = onSelectionChange;
-      document.addEventListener('selectionchange', _selectionChangeHandler);
+    // 伴学记录入口：统一历史列表（💡 解释 + 📋 举例 + 💬 我有话说），点击续聊
+    const companionHistoryBtn = document.getElementById('companionHistoryBtn');
+    if (companionHistoryBtn) {
+      companionHistoryBtn.addEventListener('click', () => {
+        openCompanionHistory();
+      });
     }
 
     // Read current chapter title
@@ -1349,251 +1374,53 @@
 
     const count = _cornellCues.length;
     if (count === 0) {
-      meta.textContent = '还没有 cue';
+      meta.textContent = '还没有要点';
     } else if (count === 1) {
-      meta.textContent = '1 条 cue';
+      meta.textContent = '1 条要点';
     } else {
-      meta.textContent = count + ' 条 cue';
+      meta.textContent = count + ' 条要点';
     }
   }
 
-  function onSelectionChange() {
-    const inCourse = window.AppWorkspace?.isIn('course') ?? document.body.classList.contains('learning-mode');
-    if (!inCourse) return;
-
-    // Debounce: wait for selection to settle
-    clearTimeout(window._cornellSelectionTimer);
-    window._cornellSelectionTimer = setTimeout(() => {
-      const sel = window.getSelection();
-      const text = sel ? sel.toString().trim() : '';
-      if (!text || text.length < 2) return;
-
-      // UX 修正（2026-08-11）：只追踪文章正文内的划词，
-      // 侧栏/面板/弹窗里的选中不算（否则会误启用文章外的案例研习）
-      let node = sel.rangeCount > 0 ? sel.getRangeAt(0).startContainer : null;
-      while (node && node.nodeType === Node.TEXT_NODE) node = node.parentNode;
-      const mdBody = document.getElementById('markdownBody');
-      if (!mdBody || !node || !mdBody.contains(node)) return;
-
-      // Just track selected text for context; cue creation is triggered via toolbar button
-      _pendingSelectedText = text;
-    }, 300);
-  }
-
-  async function createCue(term) {
-    const cueId = 'cue-' + (++_cornellCueIdCounter);
-    const cueData = {
-      id: cueId,
-      term: term,
-      status: 'loading',
-      snippet: '',
-      qaHistory: [],
-      suggestedQuestions: [],
-      createdAt: new Date().toISOString(),
-      el: null
-    };
-    _cornellCues.push(cueData);
-
-    // Hide empty state
-    const empty = document.getElementById('cornellEmptyState');
-    if (empty) empty.style.display = 'none';
-
-    // Render loading cue
-    renderCue(cueData);
-    updateSidebarHeader();
-
-    // 划词痕迹：立即在正文标出（loading 态即有痕迹）
+  /**
+   * 正文波浪线 marks 的统一接线：hover 显示问答摘要，
+   * 点击打开该解释的续聊面板（cue 卡片已并入伴学记录）。
+   */
+  function attachCueMarks() {
     const mdPane = document.getElementById('markdownBody');
-    if (mdPane && window.CornellTextMarks) {
-      window.CornellTextMarks.attachMarkInteractions(mdPane, {
-        getSidebarBody: () => document.getElementById('cornellSidebarBody'),
-        getCue: (id) => _cornellCues.find(c => c.id === id)
-      });
-      window.CornellTextMarks.injectCueMark(mdPane, { id: cueId, term: term });
-    }
-
-    // Fetch explanation via explain_selection (Agent SDK with ureq fallback)
-    try {
-      // Build rich context: chapter title + chapter goal + surrounding text + course goal
-      const chapterTitle = _currentChapterTitle;
-
-      // Extract chapter goal from the first callout block in the rendered content
-      const md = document.getElementById('markdownBody');
-      let chapterGoal = '';
-      if (md) {
-        const callout = md.querySelector('blockquote[data-enhanced]');
-        if (callout) {
-          chapterGoal = callout.textContent.trim().substring(0, 200);
-        }
-      }
-
-      // Extract surrounding paragraph from DOM selection
-      let surroundingText = '';
-      const sel = window.getSelection();
-      if (sel && sel.rangeCount > 0) {
-        let node = sel.getRangeAt(0).startContainer;
-        // Walk up to find the enclosing paragraph or block element
-        while (node && node.nodeType === Node.TEXT_NODE) node = node.parentNode;
-        // Try to find a paragraph, heading, or list item
-        const blockEl = node?.closest?.('p, h1, h2, h3, h4, li, td, blockquote') || node;
-        if (blockEl) surroundingText = blockEl.textContent.trim().substring(0, 400);
-      }
-
-      const context = {
-        chapterTitle: chapterTitle,
-        chapterGoal: chapterGoal,
-        surroundingText: surroundingText
-      };
-      const result = await window.__TAURI__.core.invoke('explain_selection', {
-        projectPath: _projectPath,
-        text: term,
-        context: JSON.stringify(context),
-        previousQa: [],
-      });
-
-      // result = {explanation: string, suggestedQuestions: string[]}
-      updateCueToActive(cueId, result.explanation, result.suggested_questions);
-    } catch (err) {
-      const msg = (err && err.message) || String(err);
-      updateCueToActive(cueId, '解释失败: ' + msg, []);
-    }
-  }
-
-  function updateCueToActive(cueId, explanation, suggestedQuestions) {
-    const cue = _cornellCues.find(c => c.id === cueId);
-    if (!cue) return;
-
-    cue.status = 'active';
-    cue.snippet = explanation;
-    cue.qaHistory = [{ q: cue.term, a: explanation }];
-    cue.suggestedQuestions = suggestedQuestions && suggestedQuestions.length > 0
-      ? suggestedQuestions
-      : (window.ExplainConversation ? window.ExplainConversation.FALLBACK_QUESTIONS : [
-          '这是什么意思？', '举个例子', '有什么应用场景？', '需要注意什么陷阱？'
-        ]);
-
-    renderCue(cue);
-    updateSidebarHeader();
-    persistCue(cue);
-  }
-
-  function appendQAToCue(cueId, question, answer) {
-    const cue = _cornellCues.find(c => c.id === cueId);
-    if (!cue) return;
-
-    cue.qaHistory.push({ q: question, a: answer });
-    renderCue(cue);
-    persistCue(cue);
-  }
-
-  function renderCue(cue) {
-    const container = document.getElementById('cornellSidebarBody');
-    if (!container) return;
-
-    // Remove old element if exists
-    if (cue.el && cue.el.parentNode) {
-      cue.el.remove();
-    }
-
-    const el = document.createElement('div');
-    const isCollapsed = cue.status !== 'loading';
-    el.className = 'cornell-cue' + (isCollapsed ? ' collapsed' : cue.status === 'active' ? ' active' : '');
-    el.dataset.cueId = cue.id;
-
-    // Header: term + tag + toggle
-    const roundCount = cue.qaHistory.length;
-    const tagText = cue.status === 'loading' ? '新' : (roundCount + ' 轮');
-    const tagClass = cue.status === 'loading' ? 'new' : 'qa';
-
-    let html = `
-      <div class="cornell-cue-header">
-        <span class="cornell-cue-term">${escapeHtml(cue.term)}</span>
-        <span class="cornell-cue-tag ${tagClass}">${tagText}</span>
-        <span class="cornell-cue-delete" data-cue-id="${cue.id}" title="删除这条笔记">×</span>
-        <span class="cornell-cue-toggle">${isCollapsed ? '▶' : '▼'}</span>
-      </div>
-    `;
-
-    if (cue.status === 'loading') {
-      html += `<div class="cornell-cue-loading">AI 正在生成 cue...</div>`;
-    } else {
-      // Q&A history (all rounds, including the initial explanation, shown fully)
-      if (cue.qaHistory.length > 0) {
-        html += `<div class="cornell-cue-qa-list">`;
-        for (let i = 0; i < cue.qaHistory.length; i++) {
-          const qa = cue.qaHistory[i];
-          html += `
-            <div class="cornell-cue-qa-item">
-              <div class="q">Q: ${escapeHtml(qa.q)}</div>
-              <div class="a">${escapeHtml(qa.a)}</div>
-            </div>
-          `;
-        }
-        html += `</div>`;
-      }
-
-      // Suggested question chips — show short label, full text on hover
-      html += `<div class="cornell-cue-chips">`;
-      cue.suggestedQuestions.slice(0, 3).forEach((q, qi) => {
-        const shortLabel = '追问' + (qi + 1);
-        html += `<span class="cornell-cue-chip" data-q="${escapeHtml(q)}" title="${escapeHtml(q)}">${shortLabel}</span>`;
-      });
-      html += `</div>`;
-
-      // Free input bar
-      html += `
-        <div class="cornell-cue-input-bar">
-          <input type="text" placeholder="输入你的问题..." data-cue-id="${cue.id}" />
-          <button data-cue-id="${cue.id}">发送</button>
-        </div>
-      `;
-    }
-
-    el.innerHTML = html;
-    container.appendChild(el);
-    cue.el = el;
-
-    // Bind header click to toggle collapse
-    const header = el.querySelector('.cornell-cue-header');
-    if (header && cue.status !== 'loading') {
-      header.addEventListener('click', () => {
-        el.classList.toggle('collapsed');
-        const toggle = header.querySelector('.cornell-cue-toggle');
-        if (toggle) toggle.textContent = el.classList.contains('collapsed') ? '▶' : '▼';
-      });
-    }
-
-    // Bind chip clicks
-    if (cue.status === 'active') {
-      el.querySelectorAll('.cornell-cue-chip').forEach(chip => {
-        chip.addEventListener('click', () => onChipClick(cue.id, chip.dataset.q));
-      });
-
-      // Bind input
-      // Delete button
-      const delBtn = el.querySelector('.cornell-cue-delete');
-      if (delBtn) {
-        delBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          deleteCue(cue.id);
+    if (!mdPane || !window.CornellTextMarks) return;
+    window.CornellTextMarks.attachMarkInteractions(mdPane, {
+      getCue: (id) => _cornellCues.find(c => c.id === id),
+      onCueClick: (cueId) => {
+        const cue = _cornellCues.find(c => c.id === cueId);
+        if (!cue) return;
+        // chapter 用章节 basename：解释落盘按 {chapter_stem}/{cue_id}.json
+        const conversation = cueToConversation(cue);
+        conversation.chapter = getChapterBasename(_currentChapterFile);
+        openAICompanion(cue.term, 'explain', {
+          record: {
+            selected_text: cue.term,
+            chapter_file: _currentChapterFile,
+            explain: conversation
+          }
         });
       }
+    });
+  }
 
-      const input = el.querySelector('.cornell-cue-input-bar input');
-      const btn = el.querySelector('.cornell-cue-input-bar button');
-      if (input && btn) {
-        const submit = () => {
-          const q = input.value.trim();
-          if (!q) return;
-          input.value = '';
-          onFreeInputSubmit(cue.id, q);
-        };
-        btn.addEventListener('click', submit);
-        input.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter') submit();
-        });
-      }
-    }
+  /** 内部数据结构 → 持久化契约（ExplanationConversation） */
+  function cueToConversation(cue) {
+    return {
+      id: cue.id,
+      selected_text: cue.term,
+      anchor: null,
+      qa_history: cue.qaHistory.map(h => ({
+        q: h.q,
+        a: h.a,
+        ts: h.ts || new Date().toISOString()
+      })),
+      created_at: cue.createdAt || new Date().toISOString()
+    };
   }
 
   // ============================================
@@ -1615,23 +1442,13 @@
       clearCues();
 
       let maxIdNum = 0;
-      const fallbackQuestions = window.ExplainConversation
-        ? window.ExplainConversation.FALLBACK_QUESTIONS
-        : ['这是什么意思？', '举个例子', '有什么应用场景？', '需要注意什么陷阱？'];
-
       data.conversations.forEach(conv => {
-        const cue = {
+        _cornellCues.push({
           id: conv.id,
           term: conv.selected_text,
-          status: 'active',
-          snippet: conv.qa_history.length > 0 ? conv.qa_history[conv.qa_history.length - 1].a : '',
-          qaHistory: conv.qa_history.map(h => ({ q: h.q, a: h.a })),
-          suggestedQuestions: fallbackQuestions,
-          createdAt: conv.created_at,
-          el: null
-        };
-        _cornellCues.push(cue);
-        renderCue(cue);
+          qaHistory: conv.qa_history.map(h => ({ q: h.q, a: h.a, ts: h.ts })),
+          createdAt: conv.created_at
+        });
 
         const match = conv.id.match(/(\d+)$/);
         if (match) {
@@ -1640,9 +1457,6 @@
         }
       });
       _cornellCueIdCounter = maxIdNum;
-
-      const empty = document.getElementById('cornellEmptyState');
-      if (empty) empty.style.display = 'none';
       updateSidebarHeader();
       updateExtraReviewButton();
 
@@ -1650,10 +1464,7 @@
       if (chapterAtCall === _currentChapterFile && window.CornellTextMarks) {
         const mdPaneLoad = document.getElementById('markdownBody');
         if (mdPaneLoad) {
-          window.CornellTextMarks.attachMarkInteractions(mdPaneLoad, {
-            getSidebarBody: () => document.getElementById('cornellSidebarBody'),
-            getCue: (id) => _cornellCues.find(c => c.id === id)
-          });
+          attachCueMarks();
           window.CornellTextMarks.injectAllCueMarks(mdPaneLoad, _cornellCues);
         }
       }
@@ -1665,116 +1476,22 @@
   async function persistCue(cue) {
     if (!_projectPath || !_currentChapterFile) return;
     try {
-      const payload = {
+      await window.__TAURI__.core.invoke('persist_explanation', {
         projectPath: _projectPath,
         chapter: getChapterBasename(_currentChapterFile),
-        conversation: {
-          id: cue.id,
-          selected_text: cue.term,
-          anchor: null,
-          qa_history: cue.qaHistory.map(h => ({
-            q: h.q,
-            a: h.a,
-            ts: new Date().toISOString()
-          })),
-          created_at: cue.createdAt || new Date().toISOString()
-        }
-      };
-      await window.__TAURI__.core.invoke('persist_explanation', payload);
+        conversation: cueToConversation(cue)
+      });
       updateExtraReviewButton();
     } catch (err) {
       console.warn('persistCue failed:', err);
     }
   }
 
-  async function onChipClick(cueId, question) {
-    await askFollowUp(cueId, question);
-  }
 
-  async function deleteCue(cueId) {
-    const idx = _cornellCues.findIndex(c => c.id === cueId);
-    if (idx < 0) return;
-    _cornellCues.splice(idx, 1);
-
-    // Remove from DOM
-    const el = document.querySelector(`.cornell-cue[data-cue-id="${cueId}"]`);
-    if (el) el.remove();
-
-    // 划词痕迹：移除正文 mark
-    const mdPaneDel = document.getElementById('markdownBody');
-    if (mdPaneDel && window.CornellTextMarks) {
-      window.CornellTextMarks.removeCueMark(mdPaneDel, cueId);
-    }
-
-    // Re-persist the file without this cue
-    try {
-      await window.__TAURI__.core.invoke('delete_explanation', {
-        projectPath: _projectPath,
-        chapter: getChapterBasename(_currentChapterFile),
-        conversationId: cueId
-      });
-    } catch (err) {
-      console.warn('[Cornell] deleteCue persist failed:', err);
-    }
-
-    // Show empty state if no cues left
-    if (_cornellCues.length === 0) {
-      const body = document.getElementById('cornellSidebarBody');
-      if (body) {
-        body.innerHTML = `<div class="cornell-cue-empty" id="cornellEmptyState"><div class="icon">📌</div>选中正文中的文字<br>点击下方按钮生成 cue<br><br><span style="font-size:10px;color:#6b7280;">例：选中"晶格"<br>→ 点底部按钮解释</span></div>`;
-      }
-    }
-    updateSidebarHeader();
-    updateExtraReviewButton();
-  }
-
-  async function onFreeInputSubmit(cueId, question) {
-    await askFollowUp(cueId, question);
-  }
-
-  async function askFollowUp(cueId, question) {
-    const cue = _cornellCues.find(c => c.id === cueId);
-    if (!cue) return;
-
-    // Temporarily show loading on the cue
-    if (cue.el) {
-      const snippet = cue.el.querySelector('.cornell-cue-snippet');
-      if (snippet) snippet.textContent = 'AI 正在回答...';
-    }
-
-    try {
-      const context = _currentChapterTitle;
-      // Build previousQA for structured parameter
-      const previousQa = cue.qaHistory.map(h => ({ q: h.q, a: h.a }));
-
-      const result = await window.__TAURI__.core.invoke('explain_selection', {
-        projectPath: _projectPath,
-        text: question,
-        context: JSON.stringify({ chapterTitle: context || '' }),
-        previousQa: previousQa,
-      });
-
-      // result = {explanation: string, suggestedQuestions: string[]}
-      appendQAToCue(cueId, question, result.explanation);
-    } catch (err) {
-      const msg = (err && err.message) || String(err);
-      appendQAToCue(cueId, question, '回答失败: ' + msg);
-    }
-  }
-
+  /** 清空本章 cue 数据（伴学记录整合后无卡片 DOM 可重置，只管数据与计数） */
   function clearCues() {
     _cornellCues = [];
     _cornellCueIdCounter = 0;
-    const body = document.getElementById('cornellSidebarBody');
-    if (body) {
-      body.innerHTML = `
-        <div class="cornell-cue-empty" id="cornellEmptyState">
-          <div class="icon">📌</div>
-          选中正文中的文字<br>AI 会自动生成 cue<br><br>
-          <span style="font-size:10px;color:#6b7280;">例：选中"位置编码"<br>→ 自动创建一条 cue</span>
-        </div>
-      `;
-    }
     updateSidebarHeader();
   }
 
@@ -1785,12 +1502,6 @@
     if (mdPaneTd && window.CornellTextMarks) {
       window.CornellTextMarks.removeAllCueMarks(mdPaneTd);
     }
-
-    if (_selectionChangeHandler) {
-      document.removeEventListener('selectionchange', _selectionChangeHandler);
-      _selectionChangeHandler = null;
-    }
-    clearTimeout(window._cornellSelectionTimer);
 
     const sidebar = document.getElementById('cornellSidebar');
     if (sidebar) {
@@ -2091,22 +1802,24 @@
   // Case Study（案例研习）
   // ============================================
 
+  // ============================================
+  // AI 伴学统一面板（解释 / 举例 / 我有话说，入口统一）
+  // ============================================
+
   /**
-   * 打开案例研习面板。
-   * @param {string} term - 划词选中的概念；为空则打开历史回看列表
+   * 打开 AI 伴学统一面板。
+   * @param {string} term - 划词概念；空 = 自由发言（不划词）
+   * @param {string} mode - 'explain' | 'example' | 'talk'
+   * @param {object} [opts] - 续聊入口
+   * @param {object} [opts.record] - 一条伴学记录（一个起点的全部模式部分）
    */
-  async function openCaseStudy(term) {
-    if (!window.CaseStudyModal) {
-      console.warn('CaseStudyModal not loaded');
-      return;
-    }
-    if (!term) {
-      await window.CaseStudyModal.openHistory(_projectPath);
+  async function openAICompanion(term, mode, opts) {
+    if (!window.AICompanionModal) {
+      console.warn('AICompanionModal not loaded');
       return;
     }
 
-    // 章节上下文（与 createCue 同源逻辑；surroundingText 取不到时留空，
-    // skill 会基于 chapterGoal/通识兜底）
+    // 章节上下文：划词进面板时取当前正文的章节目标与所在段落
     let chapterGoal = '';
     const md = document.getElementById('markdownBody');
     if (md) {
@@ -2115,24 +1828,143 @@
     }
     let surroundingText = '';
     const sel = window.getSelection();
-    if (sel && sel.rangeCount > 0 && sel.toString().trim()) {
+    if (term && sel && sel.rangeCount > 0 && sel.toString().trim()) {
       let node = sel.getRangeAt(0).startContainer;
       while (node && node.nodeType === Node.TEXT_NODE) node = node.parentNode;
       const blockEl = node?.closest?.('p, h1, h2, h3, h4, li, td, blockquote') || node;
       if (blockEl) surroundingText = blockEl.textContent.trim().substring(0, 400);
     }
 
-    const modal = new window.CaseStudyModal({
+    const modal = new window.AICompanionModal({
       projectPath: _projectPath,
-      selectedText: term,
+      selectedText: term || '',
       context: {
         chapterTitle: _currentChapterTitle,
         chapterGoal,
         surroundingText
       },
-      chapterFile: _currentChapterFile
+      chapterFile: _currentChapterFile,
+      initialMode: mode || 'talk',
+      record: (opts && opts.record) || null
     });
     await modal.open();
+  }
+
+  /**
+   * 伴学记录：一条记录 = 一个起点（💡/📋/💬 三种模式归并，新→旧）。
+   * 点击续聊：带整条记录进伴学面板，三种模式都能接着聊。
+   */
+  async function openCompanionHistory() {
+    if (!window.__TAURI__) return;
+    let caseSessions = [];
+    let talkSessions = [];
+    let explanations = [];
+    try {
+      caseSessions = await window.__TAURI__.core.invoke('case_study_list_sessions', { projectPath: _projectPath }) || [];
+    } catch (e) { console.warn('case_study_list_sessions failed:', e); }
+    try {
+      talkSessions = await window.__TAURI__.core.invoke('own_voice_list_sessions', { projectPath: _projectPath }) || [];
+    } catch (e) { console.warn('own_voice_list_sessions failed:', e); }
+    try {
+      explanations = await window.__TAURI__.core.invoke('list_project_explanations', { projectPath: _projectPath }) || [];
+    } catch (e) { console.warn('list_project_explanations failed:', e); }
+
+    const MODES = window.CompanionCore.MODES;
+    const fmtDate = (ts, withTime) => {
+      const d = new Date(ts);
+      if (!ts || isNaN(d.getTime())) return '';
+      const pad = (n) => String(n).padStart(2, '0');
+      const md = (d.getMonth() + 1) + '-' + d.getDate();
+      return withTime ? md + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) : md;
+    };
+
+    // 一条记录 = 一个起点（归并规则见 CompanionCore.buildRecords）
+    const items = window.CompanionCore.buildRecords({
+      explanations: explanations,
+      caseSessions: caseSessions,
+      talkSessions: talkSessions
+    });
+
+    if (items.length === 0) {
+      if (window.showToast) window.showToast('还没有伴学记录，划词伴学或直接「我有话说」吧', 'info');
+      return;
+    }
+
+    const overlay = document.createElement('div');
+    overlay.className = 'socratic-modal-overlay';
+    overlay.id = 'companionHistoryOverlay';
+
+    const card = document.createElement('div');
+    card.className = 'socratic-modal-card';
+    card.innerHTML = `
+      <div class="socratic-modal-header">
+        <div class="socratic-modal-header-top">
+          <div class="socratic-modal-header-left">
+            <div class="socratic-modal-icon">🕘</div>
+            <div>
+              <div class="socratic-modal-title">伴学记录</div>
+              <div class="socratic-modal-subtitle">${items.length} 个起点 · 点击继续对话</div>
+            </div>
+          </div>
+          <button id="companionHistoryCloseBtn" class="socratic-modal-end-btn">关闭</button>
+        </div>
+      </div>
+    `;
+
+    const list = document.createElement('div');
+    list.className = 'casestudy-history-list';
+    for (const item of items) {
+      const el = document.createElement('div');
+      el.className = 'casestudy-history-item';
+      const meta = [item.rounds + ' 轮', item.chapter, item.modes].filter(Boolean).join(' · ');
+      el.innerHTML = `
+        <div class="casestudy-history-concept"><span class="companion-history-kind">${MODES[item.primary].icon}</span>${escapeHtml(item.title)}</div>
+        <div class="casestudy-history-meta">${escapeHtml(meta)} · ${fmtDate(item.sortKey, item.global)}</div>
+      `;
+      el.addEventListener('click', () => {
+        overlay.remove();
+        openAICompanion(item.record.selected_text, item.primary, { record: item.record });
+      });
+      list.appendChild(el);
+    }
+    card.appendChild(list);
+
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+
+    card.querySelector('#companionHistoryCloseBtn').addEventListener('click', () => overlay.remove());
+  }
+
+  /**
+   * AI 伴学面板的解释轮次落痕：按 term 找已有 cue 追加，没有则新建。
+   * 面板是对话现场，cue 是留痕（正文波浪线锚点 + 解释记录落盘），
+   * 不再发起 LLM 调用——解释内容已由面板取得。无划词（term 空）不落痕。
+   */
+  function syncCompanionCue(info) {
+    const term = info && info.term;
+    if (!term) return;
+    const question = info.question || term;
+    const answer = info.answer || '';
+
+    let cue = _cornellCues.find(c => c.term === term);
+    if (!cue) {
+      cue = {
+        id: 'cue-' + (++_cornellCueIdCounter),
+        term: term,
+        qaHistory: [],
+        createdAt: new Date().toISOString()
+      };
+      _cornellCues.push(cue);
+    }
+    cue.qaHistory.push({ q: question, a: answer, ts: new Date().toISOString() });
+    updateSidebarHeader();
+
+    const mdPane = document.getElementById('markdownBody');
+    if (mdPane && window.CornellTextMarks) {
+      attachCueMarks();
+      window.CornellTextMarks.injectCueMark(mdPane, { id: cue.id, term: cue.term });
+    }
+    persistCue(cue);
   }
 
   // ============================================
@@ -2147,16 +1979,19 @@
     checkMissingReviewCards,
     checkAndShowDailyReview,
     clearCues,
-    createCue,
-    openCaseStudy,
+    openAICompanion,
+    openCompanionHistory,
+    syncCompanionCue,
     getProjectPath() { return _projectPath; },
     teardown() {
       if (_quizAreaEl) { _quizAreaEl.remove(); _quizAreaEl = null; }
       closeQuizModal();
       hideReviewLoading();
-      // Hide AI explain button when exiting learning mode
-      const aiBtn = document.getElementById('aiExplainBtn');
+      // Hide AI companion button when exiting learning mode
+      const aiBtn = document.getElementById('aiCompanionBtn');
       if (aiBtn) aiBtn.style.display = 'none';
+      const companionMenu = document.getElementById('companionMenu');
+      if (companionMenu) companionMenu.style.display = 'none';
       _quizPanel = null;
       _selectionExplainer = null;
       _scrollListenerBound = false;

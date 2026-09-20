@@ -1,4 +1,6 @@
-//! 案例研习会话的落盘与检索（`.learning/case-studies/{name}.json`）。
+//! 对话型学习会话的落盘与检索（`.learning/{kind}/{name}.json`）。
+//!
+//! 当前服务两个场景：`case-studies`（案例研习）/ `own-voices`（我有话说）。
 //!
 //! 为什么独立成模块：文件名即会话身份。历史会话「继续对话」要靠它**覆盖原文件**，
 //! 否则每续聊一次就在历史里多出一条重复记录（旧的 N 轮 + 新的 N+M 轮）。
@@ -42,9 +44,15 @@ pub fn resolve_session_file_name(session: &Value, overwrite_file: Option<&str>) 
 }
 
 pub fn sessions_dir(project_path: &str) -> PathBuf {
+    sessions_dir_kind(project_path, "case-studies")
+}
+
+/// 会话目录按场景区分：`case-studies`（案例研习）/ `own-voices`（我有话说）。
+/// 同一套「文件名即身份 + 目录穿越校验」规则服务两个场景，落盘互不混放。
+pub fn sessions_dir_kind(project_path: &str, kind: &str) -> PathBuf {
     Path::new(project_path)
         .join(".learning")
-        .join("case-studies")
+        .join(kind)
 }
 
 /// 写会话，返回落盘路径。
@@ -52,11 +60,12 @@ pub fn sessions_dir(project_path: &str) -> PathBuf {
 /// `overwrite_file` 是续聊时前端回传的原文件名；为空则按 `ended_at` 新建文件。
 pub fn save_session(
     project_path: &str,
+    kind: &str,
     session: &Value,
     overwrite_file: Option<&str>,
 ) -> Result<PathBuf, String> {
-    let dir = sessions_dir(project_path);
-    std::fs::create_dir_all(&dir).map_err(|e| format!("创建 case-studies 目录失败: {}", e))?;
+    let dir = sessions_dir_kind(project_path, kind);
+    std::fs::create_dir_all(&dir).map_err(|e| format!("创建 {} 目录失败: {}", kind, e))?;
     let path = dir.join(resolve_session_file_name(session, overwrite_file));
     let json = serde_json::to_string_pretty(session)
         .map_err(|e| format!("序列化 case study session 失败: {}", e))?;
@@ -68,13 +77,13 @@ pub fn save_session(
 ///
 /// 前端把 `file` 原样回传给 `save_session`，用来覆盖同一个文件而不是新增一条
 /// 重复的历史记录。
-pub fn list_sessions(project_path: &str) -> Result<Vec<Value>, String> {
-    let dir = sessions_dir(project_path);
+pub fn list_sessions(project_path: &str, kind: &str) -> Result<Vec<Value>, String> {
+    let dir = sessions_dir_kind(project_path, kind);
     if !dir.exists() {
         return Ok(vec![]);
     }
     let entries =
-        std::fs::read_dir(&dir).map_err(|e| format!("读取 case-studies 目录失败: {}", e))?;
+        std::fs::read_dir(&dir).map_err(|e| format!("读取 {} 目录失败: {}", kind, e))?;
 
     let mut sessions = vec![];
     for entry in entries.flatten() {

@@ -438,6 +438,89 @@ fn test_table_basic() {
     assert!(xml.contains("1"));
 }
 
+/// Column widths must reach Word: without `tblGrid`/`tcW` plus a fixed layout
+/// Word re-flows every column to its own liking, which is the "表格列宽难看"
+/// report. Guards the grid, the layout flag and the body-width total.
+#[test]
+fn test_table_grid_pins_column_widths() {
+    let md = "| 概念 | 说明 | 备注 |\n|------|------|------|\n\
+              | RDF | 资源描述框架，用于描述网络资源 | 用于知识图谱 |\n\
+              | OWL | Web 本体语言 | 强 |\n\
+              | SPARQL | 查询 | 略 |";
+    let bytes = docx_export::markdown_to_docx(md, Path::new(".")).unwrap();
+    let xml = extract_document_xml(&bytes);
+
+    assert!(
+        xml.contains(r#"<w:tblLayout w:type="fixed" />"#),
+        "table must pin its layout, otherwise Word ignores the column widths"
+    );
+
+    let cols: Vec<usize> = xml
+        .match_indices(r#"<w:gridCol w:w=""#)
+        .map(|(i, m)| {
+            let rest = &xml[i + m.len()..];
+            rest[..rest.find('"').unwrap()].parse().unwrap()
+        })
+        .collect();
+    assert_eq!(cols.len(), 3, "one grid column per markdown column");
+
+    let body: usize = cols.iter().sum();
+    assert_eq!(body, 8504, "columns must span the 8504-twip text block");
+
+    // A prose column earns more room than a column of short labels.
+    assert!(
+        cols[1] > cols[0] && cols[1] > cols[2],
+        "the widest column should get the most room, got {cols:?}"
+    );
+
+    // Cells carry the same width so the grid is unambiguous.
+    let cell_w: usize = {
+        let i = xml
+            .find(r#"<w:tcW w:w=""#)
+            .expect("cells should carry a width");
+        let rest = &xml[i + r#"<w:tcW w:w=""#.len()..];
+        rest[..rest.find('"').unwrap()].parse().unwrap()
+    };
+    assert_eq!(
+        cell_w, cols[0],
+        "first cell width should match the first grid column"
+    );
+}
+
+/// A one-character index column must still be given room to breathe: Word
+/// reserves 108 twips of padding on each side of a cell, so a width derived
+/// purely from "#"'s own glyph collapses the column onto its padding.
+#[test]
+fn test_table_narrow_column_is_not_collapsed() {
+    let md = "| # | 模块 | 基线（常规做法） | 本发明的改动 | 为什么改 | 技术效果 |\n\
+              |---|------|------------------|--------------|----------|----------|\n\
+              | 1 | 状态→评分接口 | 无此接口（评分模型只接收特征图） | 全新增设状态-奖励适配模型：多层全连接 + 激活 + Dropout | 状态向量维度与评分模型所需的特征图格式不匹配 | 打通向量域到评分域的映射；零新增标注 |";
+    let bytes = docx_export::markdown_to_docx(md, Path::new(".")).unwrap();
+    let xml = extract_document_xml(&bytes);
+
+    let cols: Vec<usize> = xml
+        .match_indices(r#"<w:gridCol w:w=""#)
+        .map(|(i, m)| {
+            let rest = &xml[i + m.len()..];
+            rest[..rest.find('"').unwrap()].parse().unwrap()
+        })
+        .collect();
+    assert_eq!(cols.len(), 6);
+
+    // Word's per-cell padding is 108 twips a side; the column must clear it by
+    // enough for a digit plus a comfortable gap.
+    assert!(
+        cols[0] >= 216 + 200,
+        "index column collapsed to {} twips — barely more than its own cell padding",
+        cols[0]
+    );
+    // The floor must not invert the ordering of the prose columns.
+    assert!(
+        cols[3] > cols[0] && cols[2] > cols[0],
+        "prose columns should still outrank the index column, got {cols:?}"
+    );
+}
+
 /// Test table column alignment is preserved.
 #[test]
 fn test_table_alignment() {
@@ -458,7 +541,7 @@ fn test_table_width_and_caption() {
     let xml = extract_document_xml(&bytes);
 
     assert!(
-        xml.contains(r#"<w:tblW w:w="5000" w:type="pct""#),
+        xml.contains(r#"<w:tblW w:w="8504" w:type="dxa""#),
         "table should fill page width"
     );
     assert!(
@@ -1100,7 +1183,7 @@ fn test_image_size_constrained() {
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
 
-    // Create a 2000×1000 synthetic PNG image (wider than MAX_IMAGE_WIDTH_PX = 650).
+    // Create a 2000×1000 synthetic PNG image (wider than MAX_IMAGE_WIDTH_PX = 566).
     let png_bytes = create_test_png(2000, 1000);
     let img_path = dir.join("wide.png");
     std::fs::write(&img_path, &png_bytes).unwrap();
@@ -1109,22 +1192,24 @@ fn test_image_size_constrained() {
     let bytes = docx_export::markdown_to_docx(md, &dir).unwrap();
     let xml = extract_document_xml(&bytes);
 
-    // 540px * 9525 EMU/px = 5143500, height scaled: 540 * 1000/2000 = 270px → 270 * 9525 = 2571750
+    // 566px * 9525 EMU/px = 5391150, height scaled: 566 * 1000/2000 = 283px → 283 * 9525 = 2695575
     assert!(
-        xml.contains(r#"cx="5143500""#),
-        "image width should be constrained to 540px (5143500 EMU)"
+        xml.contains(r#"cx="5391150""#),
+        "image width should fill the 566px body width (5391150 EMU)"
     );
     assert!(
-        xml.contains(r#"cy="2571750""#),
+        xml.contains(r#"cy="2695575""#),
         "image height should be proportionally scaled"
     );
 
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// Test small image is NOT upscaled beyond its natural size.
+/// A narrow image is enlarged so figures keep a consistent size across a
+/// document, but only up to MAX_IMAGE_UPSCALE — a 32px icon must not be
+/// smeared across the page.
 #[test]
-fn test_small_image_not_upscaled() {
+fn test_small_image_upscale_is_capped() {
     let dir = std::env::temp_dir().join("typora_docx_test_small");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
@@ -1138,10 +1223,63 @@ fn test_small_image_not_upscaled() {
     let bytes = docx_export::markdown_to_docx(md, &dir).unwrap();
     let xml = extract_document_xml(&bytes);
 
-    // 32px * 9525 = 304800 EMU — small images stay their natural size.
+    // 32px enlarged 2× = 64px → 64 * 9525 = 609600 EMU.
     assert!(
-        xml.contains(r#"cx="304800""#),
-        "small image should not be upscaled: expected 304800 EMU"
+        xml.contains(r#"cx="609600""#),
+        "small image should be enlarged 2× only: expected 609600 EMU"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A portrait image must be bounded by the page height as well: capping only
+/// the width lets a tall screenshot grow far past the bottom margin.
+#[test]
+fn test_tall_image_capped_to_page_height() {
+    let dir = std::env::temp_dir().join("typora_docx_test_tall");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+
+    // 500×3000: width alone would allow 566px, making it 3396px (35in) tall.
+    let png_bytes = create_test_png(500, 3000);
+    std::fs::write(dir.join("tall.png"), &png_bytes).unwrap();
+
+    let md = "![tall](tall.png)";
+    let bytes = docx_export::markdown_to_docx(md, &dir).unwrap();
+    let xml = extract_document_xml(&bytes);
+
+    // Height capped at 800px → 7620000 EMU, width back-computed as 133px.
+    assert!(
+        xml.contains(r#"cy="7620000""#),
+        "tall image height should be capped to the text block"
+    );
+    assert!(
+        xml.contains(r#"cx="1266825""#),
+        "width should shrink with the height to keep the aspect ratio"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// An image between the upscale cap and the body width fills the page, so a
+/// 400px diagram is not left stranded at two thirds of the text width.
+#[test]
+fn test_medium_image_fills_body_width() {
+    let dir = std::env::temp_dir().join("typora_docx_test_medium");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+
+    let png_bytes = create_test_png(400, 200);
+    std::fs::write(dir.join("medium.png"), &png_bytes).unwrap();
+
+    let md = "![medium](medium.png)";
+    let bytes = docx_export::markdown_to_docx(md, &dir).unwrap();
+    let xml = extract_document_xml(&bytes);
+
+    // 400px → 566px (body width) → 5391150 EMU; height 566 * 200/400 = 283px.
+    assert!(
+        xml.contains(r#"cx="5391150""#),
+        "a 400px image should be widened to the body width"
     );
 
     let _ = std::fs::remove_dir_all(&dir);

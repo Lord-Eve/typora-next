@@ -85,7 +85,7 @@ function setupEnv(opts = {}) {
   body.appendChild(mdBody);
 
   const aiBtn = document.createElement('button');
-  aiBtn._attrs.id = 'aiExplainBtn';
+  aiBtn._attrs.id = 'aiCompanionBtn';
   body.appendChild(aiBtn);
 }
 
@@ -135,7 +135,7 @@ TestRunner.test('teardown does not throw when DOM elements are missing', () => {
   const LMI = loadIntegration();
 
   // Remove elements that teardown expects to find
-  const aiBtn = document.getElementById('aiExplainBtn');
+  const aiBtn = document.getElementById('aiCompanionBtn');
   if (aiBtn) aiBtn.remove();
 
   try {

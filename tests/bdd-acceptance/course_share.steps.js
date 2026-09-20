@@ -120,13 +120,18 @@ steps.then('the learning hub cards should have a visible share button', function
   if (!this.hubSrc.includes("invoke('share_course'")) {
     throw new Error('分享按钮未调用 share_course 命令');
   }
-  // 分享按钮必须是常驻可见的（不能像删除按钮一样 opacity: 0 靠 hover 显现）
+  // 分享按钮与删除按钮一致：hover 卡片才显现
+  // （2026-09-18 用户反馈：常驻太吵，与删除统一收进 hover；
+  //  取代 09-17「显性表达」决策——发现性由按钮与删除并排的位置承担）
   const cssPath = path.join(ROOT, 'dist/styles/learning.css');
   const css = fs.readFileSync(cssPath, 'utf-8');
   const shareRule = css.match(/\.learning-hub-card-share\s*\{[^}]*\}/);
   if (!shareRule) throw new Error('learning.css 缺少 .learning-hub-card-share 规则');
-  if (/opacity:\s*0/.test(shareRule[0])) {
-    throw new Error('分享按钮不应 hover 才显现（要求显性表达）');
+  if (!/opacity:\s*0/.test(shareRule[0])) {
+    throw new Error('分享按钮应与删除按钮一致：opacity: 0，hover 卡片才显现');
+  }
+  if (!/\.learning-hub-card:hover\s+\.learning-hub-card-share/.test(css)) {
+    throw new Error('缺少 .learning-hub-card:hover .learning-hub-card-share 显现规则');
   }
 });
 

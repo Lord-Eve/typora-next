@@ -4,45 +4,9 @@ Feature: 课程案例研习（Case Study）
   I want to select a concept and get an AI-generated teaching case
   So that I can understand the concept through a concrete story and ask follow-ups
 
-  Scenario: 划词后打开案例研习 → 首轮生成案例
-    Given a course project and a selected concept
-    When the case study modal opens
-    Then case_study_chat should be invoked with the selected concept and no user answer
-
-  Scenario: 追问 → 同一 session 续聊
-    Given an opened case study modal with a generated case
-    When the user sends a follow-up question
-    Then case_study_chat should be invoked with the answer and captured session id
-
-  Scenario: 结束会话 → 落盘 .learning/case-studies/
-    Given an opened case study modal with dialogue turns
-    When the user ends the session
-    Then a session file should be written under case-studies with the contract fields
-
-  Scenario: 保存失败不吞对话（允许重试）
-    Given an opened case study modal whose save will fail
-    When the user ends the session
-    Then the modal should stay open and allow retrying the save
-
-  Scenario: 历史回看列表新→旧排序
-    Given two saved case study sessions on disk
-    When case study history is listed
-    Then sessions should come back newest first
-
-  Scenario: 历史会话续聊：打开只回放、不自动生成、输入可用
-    Given a saved case study session on disk
-    When the session is reopened for resume
-    Then no case_study_chat call should happen and the input should be enabled
-
-  Scenario: 续聊落盘覆盖原会话，历史不产生重复条目
-    Given a saved case study session on disk
-    When the user continues the conversation and ends it
-    Then the history should keep a single entry with all turns preserved
-
-  Scenario: 翻开历史但不追问，不重写会话文件
-    Given a saved case study session on disk
-    When the user reopens it without sending anything and ends
-    Then the session file should be left untouched
+  # 案例研习面板已并入 AI 伴学统一面板（📋 举个例子）：
+  # 面板层的端到端行为（首轮生成 / 续聊 / 落盘）由 tests/ai-companion 覆盖，
+  # 本文件只保留接线与外壳契约。
 
   Scenario: 后端接线（skill / bridge / Rust / index.html）
     Given the real project sources
@@ -51,11 +15,11 @@ Feature: 课程案例研习（Case Study）
     And Rust should register the case study commands
     And index.html should load the case study modules
 
-  Scenario: 划词气泡原地触发（UX 修正 2026-08-11）
+  Scenario: 划词气泡原地触发（AI 伴学统一入口收敛）
     Given the real project sources
-    Then the selection toolbar should contain a case study button
-    And the selection toolbar should toggle it together with the explain button
-    And the case study click should call openCaseStudy with the selected text
+    Then the selection toolbar should offer case study via the companion menu
+    And the companion button visibility should be gated on course mode
+    And the example mode click should call openAICompanion with the selected text
 
   Scenario: 侧栏按钮避开底部进度条遮挡（UX 修正 2026-08-11）
     Given the real project sources
@@ -66,12 +30,11 @@ Feature: 课程案例研习（Case Study）
   Scenario: 划词只在文章正文内生效（UX 修正 2026-08-11 第二轮）
     Given the real project sources
     Then the selection toolbar mouseup handler should be scoped to markdownBody
-    And the course selection tracking should be scoped to markdownBody
 
   Scenario: 侧栏删除解释按钮、案例按钮纯历史入口（UX 修正 2026-08-11 第二轮）
     Given the real project sources
     Then the cornell sidebar should not contain an explain button
-    And the case study sidebar button should open history directly
+    And the case study sidebar entry should open the unified companion history
 
   Scenario: 案例研习流式输出接线（UX 修正 2026-08-11 第二轮）
     Given the real project sources

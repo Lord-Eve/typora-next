@@ -485,6 +485,17 @@ async function runAcceptanceTests() {
   totalPassed += annotationNotesResult.passed;
   totalFailed += annotationNotesResult.failed;
 
+  // AI 伴学统一入口：解释 / 举例 / 我有话说（单一入口 + own-voice 链路）
+  console.log(`\n${YELLOW}▶ AI Companion (unified entry)${RESET}`);
+  const aiCompanionSteps = require('./ai_companion.steps');
+  const aiCompanionResult = await runFeatureFile(
+    path.join(__dirname, '../ai-companion/features/ai_companion.feature'),
+    aiCompanionSteps
+  );
+  totalPassed += aiCompanionResult.passed;
+  totalFailed += aiCompanionResult.failed;
+  if (aiCompanionSteps._cleanup) aiCompanionSteps._cleanup.call({});
+
   if (sprint10Steps._cleanup) sprint10Steps._cleanup.call({});
   if (paperImportSteps._cleanup) paperImportSteps._cleanup.call({});
   if (toolbarTooltipSteps._cleanup) toolbarTooltipSteps._cleanup.call({});

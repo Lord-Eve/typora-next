@@ -5910,8 +5910,12 @@ window.agentBridge = {
         <button id="annotateBtn" title="添加批注">💬</button>
         <button id="deleteAnnotationBtn" title="删除">🗑️</button>
         <button id="translateSelectionBtn" title="翻译">译</button>
-        <button id="aiExplainBtn" title="AI 解释" style="display:none">🤖</button>
-        <button id="caseStudySelectionBtn" title="案例研习" style="display:none">📋</button>
+        <button id="aiCompanionBtn" title="AI 伴学" style="display:none">✨</button>
+      </div>
+      <div class="companion-menu" id="companionMenu" style="display:none">
+        <button data-mode="explain">💡 给个解释</button>
+        <button data-mode="example">📋 举个例子</button>
+        <button data-mode="talk">💬 我有话说</button>
       </div>
     `;
     document.body.appendChild(selectionToolbar);
@@ -6139,28 +6143,30 @@ window.agentBridge = {
       }
     });
 
-    selectionToolbar.querySelector('#aiExplainBtn').addEventListener('click', () => {
-      const selection = window.getSelection();
-      if (!selection || selection.isCollapsed) return;
-      const text = selection.toString().trim();
-      if (!text || text.length < 2) return;
-      hideSelectionToolbar();
-      if (window.LearningModeIntegration && window.LearningModeIntegration.createCue) {
-        window.LearningModeIntegration.createCue(text);
-      }
-    });
+    // AI 伴学单一入口：✨ 按钮展开三选菜单（解释 / 举例 / 我有话说），
+    // 三个场景共用同一个 AICompanionModal 对话面板（由所选模式路由到对应 skill）
+    const companionBtn = selectionToolbar.querySelector('#aiCompanionBtn');
+    const companionMenu = selectionToolbar.querySelector('#companionMenu');
+    if (companionBtn && companionMenu) {
+      companionBtn.addEventListener('click', () => {
+        const show = companionMenu.style.display === 'none';
+        companionMenu.style.display = show ? 'flex' : 'none';
+      });
 
-    // 划词原地触发案例研习（与苏格拉底共用笔记本面板，不进窄侧栏）
-    selectionToolbar.querySelector('#caseStudySelectionBtn').addEventListener('click', () => {
-      const selection = window.getSelection();
-      if (!selection || selection.isCollapsed) return;
-      const text = selection.toString().trim();
-      if (!text || text.length < 2) return;
-      hideSelectionToolbar();
-      if (window.LearningModeIntegration && window.LearningModeIntegration.openCaseStudy) {
-        window.LearningModeIntegration.openCaseStudy(text);
-      }
-    });
+      companionMenu.querySelectorAll('button').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const mode = btn.dataset.mode;
+          companionMenu.style.display = 'none';
+          const selection = window.getSelection();
+          const text = selection && !selection.isCollapsed ? selection.toString().trim() : '';
+          if (!text || text.length < 2) return;
+          hideSelectionToolbar();
+          if (window.LearningModeIntegration && window.LearningModeIntegration.openAICompanion) {
+            window.LearningModeIntegration.openAICompanion(text, mode);
+          }
+        });
+      });
+    }
   }
 
   function findTextRange(container, searchText) {
@@ -6465,15 +6471,13 @@ window.agentBridge = {
 
   function showSelectionToolbar(rect) {
     if (!selectionToolbar) createSelectionToolbar();
-    const aiBtn = selectionToolbar.querySelector('#aiExplainBtn');
+    const aiBtn = selectionToolbar.querySelector('#aiCompanionBtn');
     if (aiBtn) {
       aiBtn.style.display = AppWorkspace.isIn('course') ? 'inline-flex' : 'none';
     }
-    // 案例研习按钮与解释按钮同显隐（仅课程模式）
-    const caseBtn = selectionToolbar.querySelector('#caseStudySelectionBtn');
-    if (caseBtn) {
-      caseBtn.style.display = AppWorkspace.isIn('course') ? 'inline-flex' : 'none';
-    }
+    // 每次气泡出现都收起伴学菜单（上一次展开的状态不残留）
+    const companionMenu = selectionToolbar.querySelector('#companionMenu');
+    if (companionMenu) companionMenu.style.display = 'none';
     selectionToolbar.style.display = 'flex';
     selectionToolbar.style.left = (rect.left + rect.width / 2 - 60) + 'px';
     selectionToolbar.style.top = (rect.top - 40) + 'px';

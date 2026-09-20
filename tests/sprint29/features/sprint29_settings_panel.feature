@@ -41,6 +41,14 @@ Feature: 设置面板分组与配置可靠性
     And 点击保存设置
     Then 保存的配置包含 word_export_use_template 为 true
 
+  # 上面那条只证明「前端发了这个键」。set_config 的形参是 AppConfig，
+  # serde 会静默丢弃未声明的键——键名对不上时配置写不进 config.json，
+  # 设置看起来保存成功、实际永不生效。这条补的是后端收得住。
+  Scenario: 前端提交的每个配置键后端都声明了
+    When 用户勾选 Word 导出模板
+    And 点击保存设置
+    Then 后端 AppConfig 必须声明前端提交的每个配置键
+
   Scenario: API key 提示文案与实际用途一致
     Then API key 输入框的提示包含 AI 字样
 

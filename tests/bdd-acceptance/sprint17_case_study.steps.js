@@ -4,13 +4,11 @@
  * BDD Acceptance Steps for 课程案例研习（Sprint 17）
  *
  * 真实文件系统 + 真实前端模块：
- * - CaseStudyModal（require dist/scripts/learning/case-study-modal）
  * - mock-tauri 真实 fs（case_study_chat/save/list 三命令）
  * - 静态接线检查（skill / agent-bridge / lib.rs / index.html）
  */
 
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const { StepRegistry } = require('../shared/runner');
 
@@ -48,7 +46,6 @@ global.document.removeEventListener = global.document.removeEventListener || (()
 const mockTauri = require('./mock-tauri'); // sets global.window.__TAURI__ (real fs)
 global.window.confirm = () => true; // 二次确认自动通过
 
-const { CaseStudyModal } = require('../../dist/scripts/learning/case-study-modal');
 
 const steps = new StepRegistry();
 
@@ -62,100 +59,9 @@ const MODE_INTEGRATION_JS = path.join(__dirname, '../../dist/scripts/learning/mo
 const LEARNING_CSS = path.join(__dirname, '../../dist/styles/learning.css');
 const MAIN_CSS = path.join(__dirname, '../../dist/styles/main.css');
 
-let _tmpDirs = [];
-
-function tmpdir(prefix) {
-  const d = fs.mkdtempSync(path.join(os.tmpdir(), prefix || 'cs17-'));
-  _tmpDirs.push(d);
-  return d;
-}
-
-function writeSession(projectPath, endedAt, selectedText, turnCount) {
-  const dir = path.join(projectPath, '.learning', 'case-studies');
-  fs.mkdirSync(dir, { recursive: true });
-  const session = {
-    version: '1.0',
-    selected_text: selectedText,
-    chapter_file: '01-ch.md',
-    session_id: 's-1',
-    turns: Array.from({ length: turnCount }, (_, i) => ({ role: i % 2 ? 'user' : 'tutor', content: `t${i}` })),
-    started_at: endedAt,
-    ended_at: endedAt,
-    end_reason: 'user_ended'
-  };
-  const file = path.join(dir, endedAt.replace(/[:.]/g, '-') + '.json');
-  fs.writeFileSync(file, JSON.stringify(session, null, 2), 'utf-8');
-  return session;
-}
-
 // ============================================
 // Given
 // ============================================
-steps.given('a course project and a selected concept', function() {
-  this.projectPath = tmpdir('cs17-new-');
-  this.modal = new CaseStudyModal({
-    projectPath: this.projectPath,
-    selectedText: 'rdfs:domain',
-    context: { chapterTitle: '第0章', chapterGoal: '掌握 RDFS 词汇', surroundingText: '' },
-    chapterFile: '00-ch.md'
-  });
-});
-
-steps.given('an opened case study modal with a generated case', async function() {
-  this.projectPath = tmpdir('cs17-open-');
-  this.modal = new CaseStudyModal({
-    projectPath: this.projectPath,
-    selectedText: 'rdfs:domain',
-    context: null,
-    chapterFile: '00-ch.md'
-  });
-  await this.modal.open();
-});
-
-steps.given('an opened case study modal with dialogue turns', async function() {
-  this.projectPath = tmpdir('cs17-end-');
-  this.modal = new CaseStudyModal({
-    projectPath: this.projectPath,
-    selectedText: 'rdfs:domain',
-    context: null,
-    chapterFile: '00-ch.md'
-  });
-  await this.modal.open(); // 首轮
-  this.modal._shell.takeInput = () => '那 range 呢？';
-  await this.modal._handleSend(); // 追问一轮
-});
-
-steps.given('an opened case study modal whose save will fail', async function() {
-  this.projectPath = tmpdir('cs17-fail-');
-  this.modal = new CaseStudyModal({
-    projectPath: this.projectPath,
-    selectedText: 'rdfs:domain',
-    context: null,
-    chapterFile: '00-ch.md'
-  });
-  await this.modal.open();
-  // 让 save 失败：目录占位为文件，mkdir 必败
-  fs.writeFileSync(path.join(this.projectPath, '.learning'), 'block');
-});
-
-steps.given('two saved case study sessions on disk', function() {
-  this.projectPath = tmpdir('cs17-hist-');
-  writeSession(this.projectPath, '2026-08-10T10:00:00', 'rdfs:domain', 4);
-  writeSession(this.projectPath, '2026-08-11T09:00:00', 'rdf:type', 6);
-});
-
-steps.given('a saved case study session on disk', async function() {
-  this.projectPath = tmpdir('cs17-ro-');
-  writeSession(this.projectPath, '2026-08-11T09:00:00', 'rdf:type', 4);
-  // 走真实 listing 拿会话（与生产同路径）：file 字段由 list_sessions 注入，
-  // 续聊落盘靠它覆盖原文件
-  const listed = await global.window.__TAURI__.core.invoke('case_study_list_sessions', {
-    projectPath: this.projectPath
-  });
-  this.savedSession = listed[0];
-  this.savedTurnCount = (this.savedSession.turns || []).length;
-});
-
 steps.given('the real project sources', function() {
   this.skillContent = fs.readFileSync(SKILL_MD, 'utf-8');
   this.bridgeContent = fs.readFileSync(BRIDGE, 'utf-8');
@@ -170,157 +76,6 @@ steps.given('the real project sources', function() {
 // ============================================
 // When
 // ============================================
-steps.when('the case study modal opens', async function() {
-  await this.modal.open();
-});
-
-steps.when('the user sends a follow-up question', async function() {
-  this.modal._shell.takeInput = () => '如果换成酒店预订领域呢？';
-  await this.modal._handleSend();
-});
-
-steps.when('the user ends the session', async function() {
-  this.modal._handleEndClick(); // confirm=true → confirmEnd
-  await new Promise(r => setTimeout(r, 50)); // 等 confirmEnd 的异步落盘
-});
-
-steps.when('case study history is listed', async function() {
-  this.sessions = await global.window.__TAURI__.core.invoke('case_study_list_sessions', {
-    projectPath: this.projectPath
-  });
-});
-
-steps.when('the session is reopened for resume', async function() {
-  this.callsBefore = mockTauri.getCaseStudyChatCalls().length;
-  this.modal = new CaseStudyModal({ projectPath: this.projectPath, savedSession: this.savedSession });
-  await this.modal.open();
-});
-
-steps.when('the user reopens it without sending anything and ends', async function() {
-  const dir = path.join(this.projectPath, '.learning', 'case-studies');
-  const file = fs.readdirSync(dir).filter(f => f.endsWith('.json'))[0];
-  this.beforeContent = fs.readFileSync(path.join(dir, file), 'utf-8');
-  this.modal = new CaseStudyModal({ projectPath: this.projectPath, savedSession: this.savedSession });
-  await this.modal.open();
-  this.modal._handleEndClick();
-  await new Promise(r => setTimeout(r, 50));
-});
-
-steps.when('the user continues the conversation and ends it', async function() {
-  this.modal = new CaseStudyModal({ projectPath: this.projectPath, savedSession: this.savedSession });
-  await this.modal.open();
-  this.modal._shell.takeInput = () => '那 range 呢？';
-  await this.modal._handleSend();
-  this.modal._handleEndClick(); // confirm=true → confirmEnd
-  await new Promise(r => setTimeout(r, 50)); // 等 confirmEnd 的异步落盘
-});
-
-// ============================================
-// Then
-// ============================================
-steps.then('case_study_chat should be invoked with the selected concept and no user answer', function() {
-  const calls = mockTauri.getCaseStudyChatCalls();
-  const last = calls[calls.length - 1];
-  if (!last) throw new Error('case_study_chat was not invoked');
-  if (last.selectedText !== 'rdfs:domain') {
-    throw new Error(`selectedText mismatch: ${last.selectedText}`);
-  }
-  if (last.userAnswer !== null && last.userAnswer !== undefined) {
-    throw new Error(`first turn should have no userAnswer, got: ${last.userAnswer}`);
-  }
-});
-
-steps.then('case_study_chat should be invoked with the answer and captured session id', function() {
-  const calls = mockTauri.getCaseStudyChatCalls();
-  const last = calls[calls.length - 1];
-  if (!last || !last.userAnswer) throw new Error('follow-up call missing userAnswer');
-  if (last.userAnswer !== '如果换成酒店预订领域呢？') {
-    throw new Error(`unexpected userAnswer: ${last.userAnswer}`);
-  }
-  if (last.sessionId !== 'mock-case-session-1') {
-    throw new Error(`session id not captured from first turn, got: ${last.sessionId}`);
-  }
-});
-
-steps.then('a session file should be written under case-studies with the contract fields', function() {
-  const dir = path.join(this.projectPath, '.learning', 'case-studies');
-  if (!fs.existsSync(dir)) throw new Error('case-studies dir not created');
-  const files = fs.readdirSync(dir).filter(f => f.endsWith('.json'));
-  if (files.length !== 1) throw new Error(`expected 1 session file, got ${files.length}`);
-  const s = JSON.parse(fs.readFileSync(path.join(dir, files[0]), 'utf-8'));
-  for (const key of ['selected_text', 'chapter_file', 'turns', 'started_at', 'ended_at', 'end_reason']) {
-    if (!(key in s)) throw new Error(`session missing contract field: ${key}`);
-  }
-  if (s.selected_text !== 'rdfs:domain') throw new Error('selected_text mismatch');
-  if (!Array.isArray(s.turns) || s.turns.length < 3) {
-    throw new Error(`expected ≥3 turns (首轮+追问+回答), got ${(s.turns || []).length}`);
-  }
-});
-
-steps.then('the modal should stay open and allow retrying the save', function() {
-  if (this.modal.opened !== true) throw new Error('modal closed despite save failure');
-  if (this.modal._sessionSaved !== false) {
-    throw new Error('_sessionSaved should reset to false after failure for retry');
-  }
-});
-
-steps.then('sessions should come back newest first', function() {
-  if (!Array.isArray(this.sessions) || this.sessions.length !== 2) {
-    throw new Error(`expected 2 sessions, got ${(this.sessions || []).length}`);
-  }
-  if (this.sessions[0].selected_text !== 'rdf:type') {
-    throw new Error(`newest first violated: ${this.sessions[0].selected_text}`);
-  }
-});
-
-steps.then('no case_study_chat call should happen and the input should be enabled', function() {
-  const callsAfter = mockTauri.getCaseStudyChatCalls().length;
-  if (callsAfter !== this.callsBefore) {
-    throw new Error('resuming a history session must not trigger case_study_chat');
-  }
-  if (this.modal._resumed !== true) throw new Error('modal not in resume mode');
-  if (this.modal._sessionSaved !== false) {
-    throw new Error('resumed session should be persisted on close (not pre-marked saved)');
-  }
-  if (!Array.isArray(this.modal.turns) || this.modal.turns.length !== this.savedTurnCount) {
-    throw new Error(
-      `saved turns not seeded into turns: expected ${this.savedTurnCount}, ` +
-      `got ${(this.modal.turns || []).length}（不灌入会在落盘时截断原对话）`
-    );
-  }
-  if (this.modal._shell.inputEl && this.modal._shell.inputEl.disabled) {
-    throw new Error('input should stay enabled so the user can continue the conversation');
-  }
-});
-
-steps.then('the session file should be left untouched', function() {
-  const dir = path.join(this.projectPath, '.learning', 'case-studies');
-  const files = fs.readdirSync(dir).filter(f => f.endsWith('.json'));
-  if (files.length !== 1) throw new Error(`expected 1 session file, got ${files.length}`);
-  const after = fs.readFileSync(path.join(dir, files[0]), 'utf-8');
-  if (after !== this.beforeContent) {
-    throw new Error('翻开历史未追问却重写了会话文件（ended_at 被污染，条目会无端置顶）');
-  }
-});
-
-steps.then('the history should keep a single entry with all turns preserved', function() {
-  const dir = path.join(this.projectPath, '.learning', 'case-studies');
-  const files = fs.readdirSync(dir).filter(f => f.endsWith('.json'));
-  if (files.length !== 1) {
-    throw new Error(
-      `expected 1 session file（续聊覆盖原文件，不新增重复条目）, got ${files.length}: ${files.join(', ')}`
-    );
-  }
-  const s = JSON.parse(fs.readFileSync(path.join(dir, files[0]), 'utf-8'));
-  const expected = this.savedTurnCount + 2; // 旧轮次 + 新追问 + 新回答
-  if ((s.turns || []).length !== expected) {
-    throw new Error(`turns truncated: expected ${expected}, got ${(s.turns || []).length}`);
-  }
-  if (s.started_at !== '2026-08-11T09:00:00') {
-    throw new Error(`started_at should be preserved on resume, got ${s.started_at}`);
-  }
-});
-
 steps.then('the case study skill should exist with valid frontmatter and constraints', function() {
   if (!this.skillContent.includes('name: typora-course-case-study')) {
     throw new Error('SKILL.md missing typora-course-case-study name frontmatter');
@@ -355,38 +110,40 @@ steps.then('index.html should load the case study modules', function() {
   if (!this.indexHtml.includes('scripts/learning/notebook-modal.js')) {
     throw new Error('index.html does not load notebook-modal.js');
   }
-  if (!this.indexHtml.includes('scripts/learning/case-study-modal.js')) {
-    throw new Error('index.html does not load case-study-modal.js');
-  }
 });
 
 // ============================================
 // UX 修正（2026-08-11）：原地触发 + 防遮挡
+// （AI 伴学统一入口后：气泡收敛为单一 ✨ 按钮，案例研习走三选菜单的
+//  「📋 举个例子」→ openAICompanion(text, 'example')，不再有独立 📋 按钮）
 // ============================================
-steps.then('the selection toolbar should contain a case study button', function() {
-  if (!this.mainJs.includes('id="caseStudySelectionBtn"')) {
-    throw new Error('selection toolbar missing caseStudySelectionBtn');
+steps.then('the selection toolbar should offer case study via the companion menu', function() {
+  if (!this.mainJs.includes('id="aiCompanionBtn"')) {
+    throw new Error('selection toolbar missing aiCompanionBtn');
+  }
+  if (!this.mainJs.includes('data-mode="example"')) {
+    throw new Error('companion menu missing example mode');
   }
 });
 
-steps.then('the selection toolbar should toggle it together with the explain button', function() {
+steps.then('the companion button visibility should be gated on course mode', function() {
   const fnIdx = this.mainJs.indexOf('function showSelectionToolbar');
   if (fnIdx < 0) throw new Error('main.js missing showSelectionToolbar');
   const body = this.mainJs.slice(fnIdx, fnIdx + 1200);
-  if (!body.includes('caseStudySelectionBtn')) {
-    throw new Error('showSelectionToolbar does not toggle caseStudySelectionBtn');
+  if (!body.includes('aiCompanionBtn')) {
+    throw new Error('showSelectionToolbar does not toggle aiCompanionBtn');
   }
   if (!body.includes("AppWorkspace.isIn('course')")) {
-    throw new Error('case button visibility not gated on course mode');
+    throw new Error('companion button visibility not gated on course mode');
   }
 });
 
-steps.then('the case study click should call openCaseStudy with the selected text', function() {
-  const btnIdx = this.mainJs.indexOf("querySelector('#caseStudySelectionBtn').addEventListener");
-  if (btnIdx < 0) throw new Error('caseStudySelectionBtn click handler not bound');
-  const body = this.mainJs.slice(btnIdx, btnIdx + 800);
-  if (!body.includes('openCaseStudy(text)')) {
-    throw new Error('click handler does not call openCaseStudy(text)');
+steps.then('the example mode click should call openAICompanion with the selected text', function() {
+  const btnIdx = this.mainJs.indexOf("querySelector('#aiCompanionBtn')");
+  if (btnIdx < 0) throw new Error('aiCompanionBtn not bound in selection toolbar');
+  const body = this.mainJs.slice(btnIdx, btnIdx + 1200);
+  if (!body.includes('openAICompanion(text, mode)')) {
+    throw new Error('companion menu click does not call openAICompanion(text, mode)');
   }
 });
 
@@ -424,15 +181,6 @@ steps.then('the selection toolbar mouseup handler should be scoped to markdownBo
   }
 });
 
-steps.then('the course selection tracking should be scoped to markdownBody', function() {
-  const idx = this.modeIntegration.indexOf('function onSelectionChange');
-  if (idx < 0) throw new Error('mode-integration missing onSelectionChange');
-  const body = this.modeIntegration.slice(idx, idx + 1200);
-  if (!body.includes('mdBody.contains(node)')) {
-    throw new Error('onSelectionChange not scoped to markdownBody');
-  }
-});
-
 steps.then('the cornell sidebar should not contain an explain button', function() {
   const tplIdx = this.modeIntegration.indexOf('cornell-sidebar-actions');
   if (tplIdx < 0) throw new Error('mode-integration missing actions row');
@@ -442,12 +190,14 @@ steps.then('the cornell sidebar should not contain an explain button', function(
   }
 });
 
-steps.then('the case study sidebar button should open history directly', function() {
-  const idx = this.modeIntegration.indexOf("getElementById('caseStudyBtn')");
-  if (idx < 0) throw new Error('caseStudyBtn binding missing');
+steps.then('the case study sidebar entry should open the unified companion history', function() {
+  // AI 伴学统一入口后：侧栏按钮收敛为「🕘 伴学记录」，统一列出
+  // 📋 举例（case-studies）与 💬 我有话说（own-voices），点击续聊
+  const idx = this.modeIntegration.indexOf("getElementById('companionHistoryBtn')");
+  if (idx < 0) throw new Error('companionHistoryBtn binding missing');
   const body = this.modeIntegration.slice(idx, idx + 400);
-  if (!body.includes('openHistory')) {
-    throw new Error('caseStudyBtn does not open history directly');
+  if (!body.includes('openCompanionHistory')) {
+    throw new Error('companionHistoryBtn does not open unified history');
   }
   if (body.includes('openCaseStudy(_pendingSelectedText)')) {
     throw new Error('sidebar button still creates new case from selection');
@@ -467,10 +217,11 @@ steps.then('Rust should stream case study events to the frontend', function() {
 });
 
 steps.then('the modal should listen for case study delta events', function() {
-  const modalSrc = fs.readFileSync(
-    path.join(__dirname, '../../dist/scripts/learning/case-study-modal.js'), 'utf-8');
-  if (!modalSrc.includes("listen('case-study-event'")) {
-    throw new Error('case-study-modal does not listen case-study-event');
+  // 案例研习面板已并入 AI 伴学统一面板：流式监听由它承担
+  const panelSrc = fs.readFileSync(
+    path.join(__dirname, '../../dist/scripts/learning/ai-companion-modal.js'), 'utf-8');
+  if (!panelSrc.includes("eventName: 'case-study-event'")) {
+    throw new Error('ai-companion-modal does not listen case-study-event');
   }
 });
 
@@ -583,11 +334,5 @@ steps.then('the case study bubble code blocks should be readable in both themes'
   }
 });
 
-steps._cleanup = function() {
-  for (const d of _tmpDirs) {
-    try { fs.rmSync(d, { recursive: true, force: true }); } catch (_) { /* ignore */ }
-  }
-  _tmpDirs = [];
-};
 
 module.exports = steps;

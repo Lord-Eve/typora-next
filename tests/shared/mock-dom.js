@@ -4,6 +4,13 @@
  * innerHTML parsing (simple), classList, dataset, style, addEventListener, click
  */
 
+/** 与真实 DOM 一致：文本节点序列化时转义 & < > " ' */
+function escapeHTML(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
 function buildMockDOM() {
   const allElements = [];
 
@@ -170,7 +177,13 @@ function buildMockDOM() {
         return out;
       },
 
-      get innerHTML() { return el._innerHTML; },
+      // 真实 DOM 的 innerHTML 会把子节点序列化出来，mock 只记得 setter 写入的字符串。
+      // 只有一个 textContent 时按真实语义转义回填，否则 `div.textContent = x;
+      // return div.innerHTML`（escapeHtml 的惯用写法）在 mock 下恒为 ''。
+      get innerHTML() {
+        if (el._innerHTML === '' && el._textContent !== '') return escapeHTML(el._textContent);
+        return el._innerHTML;
+      },
       set innerHTML(v) {
         el._innerHTML = v;
         el._children = [];

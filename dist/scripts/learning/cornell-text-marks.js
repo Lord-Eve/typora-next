@@ -258,6 +258,12 @@
       var mark = closestMark(e.target);
       if (!mark) return;
       var cueId = mark.getAttribute('data-cue-id');
+      // 新交互（伴学记录整合后侧栏无卡片）：点击打开该解释的续聊面板
+      var onCueClick = opts && opts.onCueClick;
+      if (onCueClick) {
+        onCueClick(cueId);
+        return;
+      }
       var body = getSidebarBody && getSidebarBody();
       if (!body) return;
       var card = body.querySelector('.cornell-cue[data-cue-id="' + cueId + '"]');

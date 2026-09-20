@@ -1050,13 +1050,17 @@ export async function caseStudyChat(queryFnUnused, config, args) {
     throw new Error('selected_text is required for case study');
   }
 
-  const isFirstTurn = !user_answer;
+  // 首轮信号 = 无 session：案例研习面板（AI 伴学统一面板）首轮可能已带用户要求
+  // （「用音阶举例」），不能再拿 user_answer 有无来判定首轮。
+  // CaseStudyModal 旧流程不受影响：首轮 session_id 必为空，续聊轮必带。
+  const isFirstTurn = !args.session_id;
   log('info', 'Starting case study', { project_path, selected_text, first_turn: isFirstTurn });
 
   const prompt = isFirstTurn
     ? `请使用 typora-course-case-study skill 生成教学案例。\n` +
       `选中概念: ${JSON.stringify(selected_text)}\n` +
-      (context ? `章节上下文: ${JSON.stringify(context)}\n` : '')
+      (context ? `章节上下文: ${JSON.stringify(context)}\n` : '') +
+      (user_answer && user_answer.trim() ? `学生要求: ${JSON.stringify(user_answer)}\n` : '')
     : user_answer;
 
   const { output, sessionFile } = await runPiTurn({
@@ -1075,6 +1079,50 @@ export async function caseStudyChat(queryFnUnused, config, args) {
 
   const session_id = sessionFile || args.session_id || null;
   log('info', 'Case study turn complete', { content_length: output.trim().length, has_session: !!session_id });
+  return { content: output.trim(), done: false, session_id };
+}
+
+/**
+ * Own Voice（我有话说）——学生对概念说出自己的理解，AI 给针对性反馈。
+ *
+ * 与 caseStudyChat 同构（runPiTurn + sessionId 续聊 + 流式 delta），差异：
+ * - 首轮就是学生发言（不像案例首轮由 AI 主动开讲），first_turn 由 args 显式传入
+ * - 选中概念可选（支持不划词自由发言），事件名 own_voice_delta
+ */
+export async function ownVoiceChat(queryFnUnused, config, args) {
+  const { project_path, selected_text, context, user_answer, first_turn } = args;
+
+  if (!project_path) {
+    throw new Error('project_path is required for own-voice');
+  }
+  if (!user_answer || !user_answer.trim()) {
+    throw new Error('user_answer is required for own-voice');
+  }
+
+  log('info', 'Starting own-voice', { project_path, selected_text: selected_text || null, first_turn: !!first_turn });
+
+  const prompt = first_turn
+    ? `请使用 typora-course-own-voice skill 听听学生的理解并给出反馈。\n` +
+      `学生发言: ${JSON.stringify(user_answer)}\n` +
+      (selected_text && selected_text.trim() ? `选中概念: ${JSON.stringify(selected_text)}\n` : '') +
+      (context ? `章节上下文: ${JSON.stringify(context)}\n` : '')
+    : user_answer;
+
+  const { output, sessionFile } = await runPiTurn({
+    prompt,
+    config,
+    cwd: project_path,
+    tools: ['read', 'write', 'find', 'grep'],
+    sessionId: args.session_id,
+    onDelta: (delta) => emit('own_voice_delta', { delta })
+  });
+
+  if (!output || output.trim().length === 0) {
+    throw new Error('Agent returned empty own-voice response');
+  }
+
+  const session_id = sessionFile || args.session_id || null;
+  log('info', 'Own-voice turn complete', { content_length: output.trim().length, has_session: !!session_id });
   return { content: output.trim(), done: false, session_id };
 }
 
@@ -1393,6 +1441,13 @@ async function main() {
         const caseResult = await caseStudyChat(null, config, taskArgs);
         console.log(JSON.stringify(caseResult));
         log('info', 'Case-study stage completed', { content_length: caseResult.content.length });
+        process.exit(0);
+      }
+      case 'own-voice': {
+        log('info', 'Starting own-voice stage', { project_path: taskArgs.project_path, selected_text: taskArgs.selected_text || null, first_turn: !!taskArgs.first_turn, session_id: taskArgs.session_id || null });
+        const ownVoiceResult = await ownVoiceChat(null, config, taskArgs);
+        console.log(JSON.stringify(ownVoiceResult));
+        log('info', 'Own-voice stage completed', { content_length: ownVoiceResult.content.length });
         process.exit(0);
       }
       case 'review-gen': {

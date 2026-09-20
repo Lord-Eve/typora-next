@@ -67,9 +67,20 @@ Each entry has:
 
 5. **题型**: Only `"qtype": "single"` (single choice). `correct` is a single string like `"A"`.
 
-6. **weak_concepts**: Always include the concept name.
+6. **weak_concepts**: Always include the concept name. It is a statistics bucket for
+   the learner's weak concepts — **not** a place to park text that the question
+   depends on. A stem must never require information that only exists in this field.
 
 7. **id format**: `extra_1`, `extra_2`, etc. — sequential starting from 1.
+
+8. **题干必须自包含或明确可指（MANDATORY）**: 用户看到的是一个独立弹窗，弹窗里**只有题干和选项**，
+   没有章节正文可参照。所以题干里凡引用具体原文、公式、表格或代码，只有两种合法写法：
+   - **写进题干** —— 用「」包裹；多行代码用围栏代码块放进题干；
+   - **明确指代本题的划选内容** —— 写成「关于下面这段…」，并确保指的就是该 cue 的 `concept`
+     （它会被原样显示在题干上方）。
+   除此之外**禁止**「这段 / 上述 / 以下代码 / 该查询 / 前文」这类指代。
+   历史事故：`关于这段两市金价配对的 SPARQL 查询，下列理解正确的是？`，选项还引用了 `?l`、`?s`、
+   `?usdPerOz` 等变量，而那段查询从未出现在弹窗里 —— 题目根本无法作答。
 
 ### 选择题质量硬约束（MANDATORY）
 1. **长度均衡**：最长选项与最短选项的字数比 ≤ 1.8；正确项不得明显比干扰项更长更详细。

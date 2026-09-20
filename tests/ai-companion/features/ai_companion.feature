@@ -1,0 +1,96 @@
+Feature: AI 伴学统一入口（给个解释 / 举个例子 / 我有话说）
+  课程模式三个 AI 场景共用单一入口与同一个对话面板；
+  每个场景的内容回答方式由对应 skill 控制，前端只负责表现。
+
+  Scenario: 划词气泡是唯一的 AI 入口且三选可达
+    Given the app source files are loaded
+    Then the selection toolbar should contain a single companion button
+    And the companion menu should offer exactly three modes
+    And the old explain and case study bubble buttons should be gone
+    And the companion menu should open the unified panel with the picked mode
+    And the stylesheet should style the companion entry and mode controls
+
+  Scenario: 侧栏提供不划词的「我有话说」入口
+    Given the app source files are loaded
+    Then the cornell sidebar should have an own-voice button that opens free talk
+    And the sidebar history entry should merge both session kinds
+    And the sidebar history entry should list saved explanations
+
+  Scenario: own-voice skill 控制回答方式
+    Given the app source files are loaded
+    Then the own-voice skill should exist with its trigger phrase
+    And the own-voice skill should require structured feedback sections
+    And the own-voice skill should forbid ascii double quotes
+
+  Scenario: own-voice 链路端到端接线
+    Given the app source files are loaded
+    Then the bridge should wire the own-voice stage with streaming deltas
+    And Rust should register the own voice commands
+    And index.html should load the companion module
+    And the companion modal should support resuming a saved talk session
+
+  Scenario: 面板路由与落盘（真实模块 + mock tauri）
+    Given a real companion modal in a temp learning project
+    When the panel is opened in talk mode
+    Then no LLM call should happen until the student speaks
+    When the student expresses an understanding
+    Then the own voice chat should be invoked as the first turn
+    And the thread should tag the turn as talk
+    And ending the panel should persist the talk session to own-voices
+
+  Scenario: 我有话说续聊（伴学记录 → 覆盖原文件）
+    Given a real companion modal in a temp learning project
+    When the panel is opened in talk mode
+    And the student expresses an understanding
+    And the panel is ended and saved
+    When the panel is reopened from the saved session
+    Then the replayed thread should not trigger a new LLM call
+    When the student continues talking and ends the panel
+    Then the session should be overwritten in place with the added turns
+
+  Scenario: 解释记录续聊（伴学记录 💡 → 覆盖原 cue）
+    Given a real companion modal in a temp learning project
+    And an existing explanation conversation with two rounds
+    When the panel is reopened from the explanation record
+    Then the replayed explain thread should not trigger a new LLM call
+    When the student asks a follow-up in explain mode
+    Then the explain turn should carry the prior history
+    And the explanation should be overwritten in place with the added round
+
+  Scenario: 举例模式首轮生成 + 结束落盘（原案例研习面板的职责，已并入伴学面板）
+    Given a real companion modal in a temp learning project
+    When the panel is opened in example mode
+    Then the case study chat should be invoked with the concept and no user answer
+    When the student asks a follow-up in example mode
+    Then the case study chat should be invoked with the answer and the captured session id
+    When the user ends the session
+    Then ending the panel should persist the example session with its start key
+
+  Scenario: 举例续聊（伴学记录 📋 → 覆盖原会话）
+    Given a real companion modal in a temp learning project
+    And a saved example session on disk
+    When the panel is reopened from the saved example session
+    Then the replayed example thread should not trigger a new LLM call
+    When the student continues the example and ends the panel
+    Then the example session should be overwritten in place
+
+  Scenario: 翻开历史但不追问，不重写会话文件
+    Given a real companion modal in a temp learning project
+    And a saved example session on disk
+    When the saved session is reopened and ended without sending anything
+    Then the session file should be left untouched
+
+  Scenario: 落盘失败不吞对话（面板留在原地可重试）
+    Given a real companion modal in a temp learning project
+    When the panel is opened in example mode with an unwritable project
+    And the student asks a follow-up in example mode
+    And the user ends the session
+    Then the panel should stay open and allow retrying the save
+
+  Scenario: 一条记录 = 一个起点（同概念跨模式归并）
+    Given a real companion modal in a temp learning project
+    And an explanation record and an example session on the same concept
+    When the learning records are collected
+    Then the concept should appear as a single record
+    And the record should carry both parts for resuming
+    And an unselected free-talk session should stay its own record

@@ -16,6 +16,7 @@ pub mod course_completion;
 mod docx_template;
 pub mod element_compliance;
 pub mod explain_parse;
+pub mod extra_quiz_context;
 pub mod file_assoc;
 pub mod frontmatter;
 pub mod learner_profile;
@@ -77,6 +78,11 @@ pub struct AppConfig {
     // AnySearch paper search configuration (anonymous access when unset)
     #[serde(default)]
     pub anysearch_api_key: Option<String>,
+    // Word export: ask for a .docx style template before each export.
+    // `None` means the key was never written — the frontend then falls back to
+    // the legacy localStorage flag this was migrated from.
+    #[serde(default)]
+    pub word_export_use_template: Option<bool>,
     // User-chosen papers library root; imported papers go to
     // `{root}/{search-domain}/{yyyy-MM}/` (unset → project/.learning/papers → app data)
     #[serde(default)]
@@ -4114,6 +4120,65 @@ mod explanation_persistence {
         Ok(())
     }
 
+    /// 项目级解释会话清单（伴学记录 💡 条目数据源）。
+    /// 扫描 `.learning/explanations/{章节}/{cue}.json` 拍平并标注章节，
+    /// 按 `created_at` 新→旧。复习系统数据不动，这里只做展示聚合。
+    pub fn list_project_conversations(project_path: &str) -> Result<Vec<serde_json::Value>, String> {
+        let root = get_explanations_dir(project_path);
+        if !root.exists() {
+            return Ok(vec![]);
+        }
+        let mut items: Vec<serde_json::Value> = Vec::new();
+        let chapters = std::fs::read_dir(&root)
+            .map_err(|e| format!("读取 explanations 目录失败: {}", e))?;
+        for ch in chapters.flatten() {
+            let ch_path = ch.path();
+            if !ch_path.is_dir() {
+                continue;
+            }
+            let chapter_name = ch.file_name().to_string_lossy().to_string();
+            let files = match std::fs::read_dir(&ch_path) {
+                Ok(rd) => rd,
+                Err(_) => continue,
+            };
+            for f in files.flatten() {
+                let path = f.path();
+                if path.extension().and_then(|s| s.to_str()) != Some("json") {
+                    continue;
+                }
+                let content = match std::fs::read_to_string(&path) {
+                    Ok(c) => c,
+                    Err(_) => continue,
+                };
+                let conv: ExplanationConversation = match serde_json::from_str(&content) {
+                    Ok(c) => c,
+                    Err(_) => continue, // 损坏文件跳过，不让整个列表失败
+                };
+                let rounds = conv.qa_history.len();
+                let last_ts = conv
+                    .qa_history
+                    .last()
+                    .map(|q| q.ts.clone())
+                    .unwrap_or_default();
+                items.push(serde_json::json!({
+                    "id": conv.id,
+                    "selected_text": conv.selected_text,
+                    "chapter": chapter_name,
+                    "rounds": rounds,
+                    "created_at": conv.created_at,
+                    "last_ts": last_ts,
+                    "qa_history": conv.qa_history,
+                }));
+            }
+        }
+        items.sort_by(|a, b| {
+            let ka = a.get("created_at").and_then(|v| v.as_str()).unwrap_or("");
+            let kb = b.get("created_at").and_then(|v| v.as_str()).unwrap_or("");
+            kb.cmp(ka)
+        });
+        Ok(items)
+    }
+
     fn evict_oldest_if_over_limit(project_path: &str, chapter: &str) -> Result<(), String> {
         let chapter_dir = get_explanations_chapter_dir(project_path, chapter);
         let entries = match std::fs::read_dir(&chapter_dir) {
@@ -5051,7 +5116,12 @@ async fn case_study_save_session(
     session: serde_json::Value,
     overwrite_file: Option<String>,
 ) -> Result<String, String> {
-    let path = case_study_store::save_session(&project_path, &session, overwrite_file.as_deref())?;
+    let path = case_study_store::save_session(
+        &project_path,
+        "case-studies",
+        &session,
+        overwrite_file.as_deref(),
+    )?;
     Ok(path.display().to_string())
 }
 
@@ -5059,7 +5129,38 @@ async fn case_study_save_session(
 /// 每条会被注入 `file` 字段（会话身份），前端续聊时回传给 save。
 #[tauri::command]
 async fn case_study_list_sessions(project_path: String) -> Result<Vec<serde_json::Value>, String> {
-    case_study_store::list_sessions(&project_path)
+    case_study_store::list_sessions(&project_path, "case-studies")
+}
+
+/// 列出「我有话说」历史会话（新→旧），供伴学记录列表 / 续聊。
+/// 契约与 case_study_list_sessions 一致（含 file 会话身份注入）。
+#[tauri::command]
+async fn own_voice_list_sessions(project_path: String) -> Result<Vec<serde_json::Value>, String> {
+    case_study_store::list_sessions(&project_path, "own-voices")
+}
+
+/// 列出项目全部解释会话（伴学记录 💡 条目），按 created_at 新→旧。
+#[tauri::command]
+async fn list_project_explanations(project_path: String) -> Result<Vec<serde_json::Value>, String> {
+    explanation_persistence::list_project_conversations(&project_path)
+}
+
+/// 「我有话说」会话落盘（.learning/own-voices/{name}.json）。
+/// schema 与案例研习同构（前端持有），复用 case_study_store 的文件身份规则；
+/// 暂无历史回看 UI，落盘保证对话不因关闭面板而丢失。
+#[tauri::command]
+async fn own_voice_save_session(
+    project_path: String,
+    session: serde_json::Value,
+    overwrite_file: Option<String>,
+) -> Result<String, String> {
+    let path = case_study_store::save_session(
+        &project_path,
+        "own-voices",
+        &session,
+        overwrite_file.as_deref(),
+    )?;
+    Ok(path.display().to_string())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -5208,8 +5309,12 @@ pub fn run() {
             socratic_save_session,
             ai_agent::socratic_chat,
             ai_agent::case_study_chat,
+            ai_agent::own_voice_chat,
             case_study_save_session,
             case_study_list_sessions,
+            own_voice_save_session,
+            own_voice_list_sessions,
+            list_project_explanations,
             read_exploration_session,
             write_exploration_session,
             delete_exploration_session,

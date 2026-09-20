@@ -1973,6 +1973,12 @@ pub struct QuizQuestion {
     pub correct: Value, // String for single, Vec<String> for multiple, null for short
     #[serde(default)]
     pub weak_concepts: Vec<String>,
+    /// The material the stem is about — the learner's highlighted selection.
+    /// The review modal renders it above the question, because a stem that
+    /// says "关于这段…查询" is unanswerable without the text it points at.
+    /// Only extras carry it; chapter-quiz questions leave it `None`.
+    #[serde(default)]
+    pub context: Option<String>,
 }
 
 /// Return type for generate_chapter_quiz — separates standard quiz questions
@@ -2034,6 +2040,7 @@ pub fn build_extra_question(idx: usize, concept: &str, explanation: &str) -> Qui
         ],
         correct: serde_json::Value::String("A".to_string()),
         weak_concepts: vec![concept.to_string()],
+        context: None,
     }
 }
 
@@ -3001,13 +3008,34 @@ pub async fn load_extra_questions(
         if path.extension().and_then(|s| s.to_str()) != Some("json") {
             continue;
         }
+        let cue_id = match path.file_stem().and_then(|s| s.to_str()) {
+            Some(s) => s.to_string(),
+            None => continue,
+        };
         let content =
             std::fs::read_to_string(&path).map_err(|e| format!("读取 extras 文件失败: {}", e))?;
-        if let Ok(questions) = serde_json::from_str::<Vec<QuizQuestion>>(&content) {
+        if let Ok(mut questions) = serde_json::from_str::<Vec<QuizQuestion>>(&content) {
+            // Extras live per-cue, and the cue's explanation file sits in the
+            // sibling directory — that's where the highlighted text is.
+            let context = read_cue_selection(proj, &chapter_file, &cue_id);
+            for q in &mut questions {
+                if q.context.is_none() {
+                    q.context = context.clone();
+                }
+            }
             all.extend(questions);
         }
     }
     Ok(all)
+}
+
+/// The learner's highlighted selection for a cue, read from its explanation
+/// file. Used as an extra question's context so the modal can show what the
+/// stem refers to; a missing or blank selection yields `None`.
+fn read_cue_selection(project_path: &str, chapter: &str, cue_id: &str) -> Option<String> {
+    let path =
+        crate::explanation_persistence::get_explanation_cue_path(project_path, chapter, cue_id);
+    crate::extra_quiz_context::read_cue_selection(&path)
 }
 
 // ============================================
@@ -3255,6 +3283,149 @@ pub async fn case_study_chat(
 
     log::info!(
         "case_study_chat SUCCESS: content_len={}",
+        result.content.len()
+    );
+    Ok(result)
+}
+
+/// Own Voice「我有话说」via Agent SDK (agent-bridge "own-voice" stage)。
+/// 与 case_study_chat 同构：spawn bridge → 逐行转发 delta → 解析结果行
+/// （SocraticChatResponse 契约复用；done 恒为 false，用户手动关闭面板）。
+/// 差异：首轮就是学生发言（first_turn 显式传入），选中概念可选（支持不划词）。
+#[tauri::command]
+pub async fn own_voice_chat(
+    project_path: String,
+    selected_text: Option<String>,
+    context: Option<String>,
+    user_answer: String,
+    first_turn: Option<bool>,
+    app_handle: tauri::AppHandle,
+    session_id: Option<String>,
+) -> Result<crate::SocraticChatResponse, String> {
+    // 首轮缺省：无 session 即视为首轮（与 bridge 侧 ownVoiceChat 的 prompt 组装约定一致）
+    let first_turn = first_turn.unwrap_or_else(|| session_id.is_none());
+    log::info!(
+        "own_voice_chat START: project={}, selected={:?}, first_turn={}, session_id={}",
+        project_path,
+        selected_text,
+        first_turn,
+        session_id.as_deref().unwrap_or("(none)")
+    );
+
+    let config = crate::get_config(app_handle.clone()).map_err(|e| e.to_string())?;
+
+    // Ensure the bundled typora-course-own-voice skill is available in the
+    // project (idempotent; also refreshes stale copies in existing projects).
+    let _ = copy_bundled_skills_to_project(&project_path);
+
+    let bridge_path = get_agent_bridge_path()?;
+
+    let payload = serde_json::json!({
+        "config": {
+            "ai_provider": config.ai_provider.as_ref().map(|p| format!("{:?}", p).to_lowercase()).unwrap_or_else(|| "anthropic".to_string()),
+            "ai_base_url": config.ai_base_url,
+            "api_key": config.api_key,
+            "model": config.model,
+        },
+        "args": {
+            "project_path": project_path,
+            "selected_text": selected_text,
+            "context": context,
+            "user_answer": user_answer,
+            "first_turn": first_turn,
+            "session_id": session_id,
+        }
+    });
+
+    let mut cmd = std::process::Command::new("node");
+    cmd.arg(&bridge_path)
+        .arg("own-voice")
+        .arg(payload.to_string())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
+
+    apply_agent_sdk_entry(&mut cmd, &bridge_path);
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    // 流式输出：与 case_study_chat 相同的 spawn + 逐行读 stdout 套路，
+    // delta 事件名 own_voice_delta → 转发为 Tauri 事件 own-voice-event。
+    let mut child = cmd.spawn().map_err(|e| {
+        log::error!("own_voice_chat: spawn failed: {}", e);
+        format!("Failed to spawn agent-bridge: {}", e)
+    })?;
+
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| "Failed to capture bridge stdout".to_string())?;
+
+    use std::io::{BufRead, BufReader};
+    let reader = BufReader::new(stdout);
+    let mut result_line: Option<String> = None;
+    for line in reader.lines() {
+        let Ok(line) = line else { break };
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        match serde_json::from_str::<serde_json::Value>(trimmed) {
+            Ok(event) if event.get("type").and_then(|v| v.as_str()) == Some("own_voice_delta") => {
+                if let Err(e) = app_handle.emit("own-voice-event", &event) {
+                    log::warn!("own-voice-event emit failed: {}", e);
+                }
+            }
+            _ => {
+                // 非 delta 行：候选结果行（progress_log 事件行缺 content 字段，
+                // 最终反序列化时会跳过）
+                result_line = Some(trimmed.to_string());
+            }
+        }
+    }
+
+    let status = child.wait().map_err(|e| e.to_string())?;
+    if !status.success() {
+        let stderr = child
+            .stderr
+            .take()
+            .map(|mut s| {
+                let mut buf = String::new();
+                use std::io::Read;
+                let _ = s.read_to_string(&mut buf);
+                buf
+            })
+            .unwrap_or_default();
+        log::error!(
+            "own_voice_chat: agent failed: stderr={}",
+            stderr
+        );
+        return Err(format!("Agent own voice failed: {}", stderr));
+    }
+
+    let raw = result_line.ok_or_else(|| {
+        log::error!("own_voice_chat: no result line from bridge");
+        "No result from own voice agent".to_string()
+    })?;
+
+    let result: crate::SocraticChatResponse = serde_json::from_str(&raw).map_err(|e| {
+        log::error!(
+            "own_voice_chat: parse failed: {} — raw: {}",
+            e,
+            raw
+        );
+        format!(
+            "Failed to parse own voice response. Raw: {}",
+            &raw[..std::cmp::min(200, raw.len())]
+        )
+    })?;
+
+    log::info!(
+        "own_voice_chat SUCCESS: content_len={}",
         result.content.len()
     );
     Ok(result)

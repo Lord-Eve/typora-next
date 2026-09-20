@@ -174,6 +174,39 @@ steps.then('保存的配置包含 word_export_use_template 为 true', async () =
   }
 });
 
+/** 从 lib.rs 的 `pub struct AppConfig { ... }` 中读出字段名 */
+function readAppConfigFields() {
+  const fs = require('fs');
+  const libRs = fs.readFileSync(path.join(__dirname, '../../src-tauri/src/lib.rs'), 'utf8');
+  const start = libRs.indexOf('pub struct AppConfig {');
+  if (start < 0) throw new Error('lib.rs 未找到 AppConfig');
+  const body = libRs.slice(start, libRs.indexOf('\n}', start));
+  const fields = [];
+  const re = /pub\s+([a-z_][a-z0-9_]*)\s*:/g;
+  let m;
+  while ((m = re.exec(body)) !== null) fields.push(m[1]);
+  if (fields.length === 0) throw new Error('AppConfig 未解析出任何字段');
+  return fields;
+}
+
+// 上一个场景（保存的配置包含 word_export_use_template 为 true）是**假绿**：
+// mock 的 set_config 把前端传来的对象原样存下，mock 里没有 serde，未知字段
+// 照样活着。真实链路上 set_config 的形参是 AppConfig，serde 默认**静默丢弃**
+// 未声明的键 → 写进 config.json 的 JSON 里没有它 → 下次 get_config 读回
+// undefined → 用户勾了开关但导出时永远走默认样式。
+//
+// 这条步骤补的正是那一层：前端放进 config 对象的每个键，Rust 侧都必须声明。
+steps.then('后端 AppConfig 必须声明前端提交的每个配置键', async () => {
+  if (!__savedConfig) throw new Error('set_config 未被调用，无法比对');
+  const declared = readAppConfigFields();
+  const dropped = Object.keys(__savedConfig).filter(k => !declared.includes(k));
+  if (dropped.length > 0) {
+    throw new Error(
+      `前端写入但 AppConfig 未声明（serde 会静默丢弃，设置必然无效）: ${dropped.join(', ')}`
+    );
+  }
+});
+
 steps.then('API key 输入框的提示包含 AI 字样', async () => {
   const hint = root.querySelector('#settingApiKeyHint');
   if (!hint) throw new Error('未找到 API key 提示');

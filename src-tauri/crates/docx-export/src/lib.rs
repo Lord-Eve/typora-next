@@ -15,11 +15,36 @@ use std::path::{Path, PathBuf};
 
 const MATH_NS: &str = "http://schemas.openxmlformats.org/officeDocument/2006/math";
 
-/// Max image width in pixels for DOCX output.
-/// Docx-rs default A4: page=11906twips, margins=1701twips each side
-/// → body width = 8504 twips = 5.906 inches.
-/// 540px * 9525 EMU/px = 5,143,500 EMU = 5.625 inches (≈ 0.14in margin each side).
-const MAX_IMAGE_WIDTH_PX: u32 = 540;
+/// Width of the text block, in twips. Docx-rs default A4: page=11906twips,
+/// margins=1701twips each side → 11906 - 1701×2 = 8504 twips = 5.906 inches.
+/// Tables use this as their total column width so they line up with the text.
+const BODY_WIDTH_TWIPS: usize = 8504;
+
+/// Max image width in pixels for DOCX output, at Word's 96 DPI.
+/// 8504 twips / 1440 twips-per-inch × 96 px-per-inch = 566 px
+/// (566px × 9525 EMU/px = 5,391,150 EMU = 5.895in, just inside the 5.906in body).
+const MAX_IMAGE_WIDTH_PX: u32 = 566;
+
+/// Floor for a table column, in display columns: roughly three CJK glyphs,
+/// which covers the 108 twips Word reserves on each side of a cell plus a
+/// couple of digits. Keeps a short index or status column readable instead of
+/// collapsing it onto its own padding.
+const MIN_COLUMN_UNITS: usize = 6;
+
+/// Max image height in pixels, at Word's 96 DPI. The text block is
+/// 16838 - 1985 - 1701 = 13152 twips = 877 px tall; this leaves room for the
+/// caption line beneath the figure plus a little slack, so a tall diagram stays
+/// on one page instead of running past the bottom margin.
+///
+/// Width alone is not enough to bound an image: a portrait flowchart forced to
+/// the body width grows proportionally *taller*, and an 11-step `flowchart TB`
+/// ends up twice the height of the page.
+const MAX_IMAGE_HEIGHT_PX: u32 = 800;
+
+/// Images narrower than the body are scaled up to fill it, so screenshots and
+/// diagrams render consistently instead of shrinking with their source size.
+/// Upscaling stops here to keep a small icon from being smeared across the page.
+const MAX_IMAGE_UPSCALE: f64 = 2.0;
 
 /// Math expression types
 #[derive(Debug, Clone, PartialEq)]
@@ -1606,6 +1631,8 @@ impl Converter {
         alignments: Vec<pulldown_cmark::Alignment>,
     ) -> Table {
         let alignments_ref = &alignments;
+        let cols = rows.iter().map(|r| r.len()).max().unwrap_or(0);
+        let grid = table_grid_widths(&rows, cols);
         let mut table_rows: Vec<TableRow> = Vec::with_capacity(rows.len());
         for row in rows {
             let mut cells: Vec<TableCell> = Vec::with_capacity(row.len());
@@ -1621,11 +1648,18 @@ impl Converter {
                     };
                     para = para.align(align_type);
                 }
-                cells.push(TableCell::new().add_paragraph(para));
+                let mut cell = TableCell::new().add_paragraph(para);
+                if let Some(w) = grid.get(col_idx) {
+                    cell = cell.width(*w, WidthType::Dxa);
+                }
+                cells.push(cell);
             }
             table_rows.push(TableRow::new(cells));
         }
-        Table::new(table_rows).width(5000, WidthType::Pct)
+        Table::new(table_rows)
+            .set_grid(grid)
+            .layout(TableLayoutType::Fixed)
+            .width(BODY_WIDTH_TWIPS, WidthType::Dxa)
     }
 
     fn block_to_paragraph(&self, block: BlockItem) -> Paragraph {
@@ -2357,6 +2391,83 @@ fn split_text_with_math(text: &str) -> Vec<TextOrMath> {
     result
 }
 
+/// Width of a string in text columns: CJK ideographs, Hangul and full-width
+/// punctuation take two columns, everything else takes one.
+fn text_display_width(s: &str) -> usize {
+    s.chars()
+        .map(|c| {
+            let wide = matches!(c as u32,
+                0x1100..=0x115F | 0x2E80..=0xA4CF | 0xAC00..=0xD7A3 | 0xF900..=0xFAFF
+                | 0xFE30..=0xFE6F | 0xFF00..=0xFF60 | 0xFFE0..=0xFFE6 | 0x20000..=0x3FFFD);
+            if wide {
+                2
+            } else {
+                1
+            }
+        })
+        .sum()
+}
+
+/// Display width of an inline run, used to size table columns.
+fn inline_display_width(items: &[InlineItem]) -> usize {
+    items
+        .iter()
+        .map(|item| match item {
+            InlineItem::Text(t) => text_display_width(t),
+            InlineItem::Code(c) => c.chars().count(),
+            InlineItem::Bold(c) | InlineItem::Italic(c) | InlineItem::Strikethrough(c) => {
+                inline_display_width(c)
+            }
+            InlineItem::Link { children, .. } => inline_display_width(children),
+            InlineItem::Math { .. } => 4,
+            InlineItem::Image(_, alt) => text_display_width(alt).max(4),
+            InlineItem::HardBreak => 0,
+        })
+        .sum()
+}
+
+/// Distribute the text-block width across the table's columns.
+///
+/// A column is weighted by the square root of its widest cell, so a column of
+/// prose gets more room than a column of short labels without a single long
+/// sentence starving the rest. The widths sum to `BODY_WIDTH_TWIPS` and are
+/// emitted alongside `tblLayout=fixed`, which is what stops Word from
+/// re-flowing the columns to its own liking.
+///
+/// Every column is credited with at least `MIN_COLUMN_UNITS` regardless of how
+/// short its content is. Purely content-driven weights assume the widest cell
+/// can fit on one line, which stops being true once a table has several long
+/// columns — an index column holding just `#` then gets a couple of glyphs'
+/// worth of width, less than Word's own 108-twip-per-side cell padding, and the
+/// character ends up touching the cell borders.
+fn table_grid_widths(rows: &[Vec<Vec<InlineItem>>], cols: usize) -> Vec<usize> {
+    if cols == 0 {
+        return Vec::new();
+    }
+    let mut widest = vec![MIN_COLUMN_UNITS; cols];
+    for row in rows {
+        for (i, cell) in row.iter().enumerate().take(cols) {
+            widest[i] = widest[i].max(inline_display_width(cell));
+        }
+    }
+    let shares: Vec<f64> = widest.iter().map(|w| (*w as f64).sqrt()).collect();
+    let total: f64 = shares.iter().sum();
+
+    let mut widths = Vec::with_capacity(cols);
+    let mut used = 0usize;
+    for (i, share) in shares.iter().enumerate() {
+        // Last column takes the remainder so rounding never overflows the body.
+        let w = if i + 1 == cols {
+            BODY_WIDTH_TWIPS.saturating_sub(used)
+        } else {
+            (BODY_WIDTH_TWIPS as f64 * share / total).round() as usize
+        };
+        used += w;
+        widths.push(w);
+    }
+    widths
+}
+
 fn read_image(path: &str) -> Result<Pic, String> {
     let bytes = if path.starts_with("http://") || path.starts_with("https://") {
         fetch_image_bytes(path)?
@@ -2369,16 +2480,16 @@ fn read_image(path: &str) -> Result<Pic, String> {
         .map_err(|e| format!("Cannot decode image {}: {}", path, e))?;
     let (w, h) = img.dimensions();
 
-    // Constrain width to MAX_IMAGE_WIDTH_PX, scale height proportionally
-    let (out_w, out_h) = if w > MAX_IMAGE_WIDTH_PX {
-        let ratio = h as f64 / w as f64;
-        (
-            MAX_IMAGE_WIDTH_PX,
-            (MAX_IMAGE_WIDTH_PX as f64 * ratio).round() as u32,
-        )
-    } else {
-        (w, h)
-    };
+    // Scale to the body, shrinking oversized images and enlarging narrow ones
+    // (up to MAX_IMAGE_UPSCALE) so figures render at a consistent size rather
+    // than inheriting whatever pixel dimensions the source file happened to
+    // have. Both constraints apply: a portrait image bounded only by width
+    // grows taller than the page.
+    let factor = (MAX_IMAGE_WIDTH_PX as f64 / w as f64)
+        .min(MAX_IMAGE_HEIGHT_PX as f64 / h as f64)
+        .min(MAX_IMAGE_UPSCALE);
+    let out_w = (w as f64 * factor).round().max(1.0) as u32;
+    let out_h = (h as f64 * factor).round().max(1.0) as u32;
 
     // Re-encode as PNG (docx-rs only supports PNG)
     let mut png_buf = Vec::new();
