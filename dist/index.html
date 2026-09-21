@@ -14,6 +14,16 @@
   <link rel="stylesheet" href="styles/exploration.css">
   <!-- Learning mode styles -->
   <link rel="stylesheet" href="styles/learning.css">
+  <!-- Typora-style UI layer (scoped to html[data-ui="typora"]) -->
+  <link rel="stylesheet" href="styles/typora-ui.css">
+  <script>
+    // Apply the UI style before first paint. Default: typora. Ctrl+Shift+U toggles.
+    (function () {
+      var style = 'typora';
+      try { style = localStorage.getItem('ui-style') || 'typora'; } catch (e) {}
+      if (style === 'typora') document.documentElement.setAttribute('data-ui', 'typora');
+    })();
+  </script>
 </head>
 <body>
   <div class="app-container">
@@ -514,6 +524,7 @@
   <script src="scripts/learning/course-roadmap.js"></script>
   <script src="scripts/export-svg-blocks.js"></script>
   <script src="scripts/main.js"></script>
+  <script src="scripts/typora-ui.js"></script>
   <script>
     // Learning mode: toolbar button opens hub (project list)
     // No auto-resume on startup — user explicitly enters learning mode
