@@ -1,0 +1,543 @@
+/* ==========================================================
+   Typora-style UI layer
+   Loaded after all other stylesheets. Everything is scoped to
+   html[data-ui="typora"], so removing that attribute (or this
+   file) restores the original Typora Next look.
+   ========================================================== */
+
+/* ---------- Palette: light (close to Typora "GitHub") ---------- */
+html[data-ui="typora"] {
+  --ty-font: "Open Sans", "Clear Sans", "Helvetica Neue", Helvetica, Arial,
+             "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  --ty-mono: "JetBrains Mono", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+  --ty-text: #333333;
+  --ty-text-weak: #777777;
+  --ty-heading: #333333;
+  --ty-bg: #ffffff;
+  --ty-side-bg: #fafafa;
+  --ty-side-text: #444444;
+  --ty-side-hover: #ececec;
+  --ty-side-active: #e3e3e3;
+  --ty-border: #eeeeee;
+  --ty-rule: #dfe2e5;
+  --ty-code-bg: #f8f8f8;
+  --ty-code-border: #e7eaed;
+  --ty-inline-code-bg: #f3f4f4;
+  --ty-link: #4183c4;
+  --ty-table-stripe: #f8f8f8;
+  --ty-icon: #8a8a8a;
+  --ty-content-width: 860px;
+
+  /* Re-map the app's own tokens so untouched components blend in */
+  --color-text-primary: var(--ty-text);
+  --color-text-secondary: #555555;
+  --color-text-muted: #999999;
+  --color-bg-primary: var(--ty-bg);
+  --color-bg-secondary: var(--ty-side-bg);
+  --color-bg-tertiary: #f0f0f0;
+  --color-bg-hover: var(--ty-side-hover);
+  --color-border: var(--ty-border);
+  --color-accent: var(--ty-link);
+  --color-accent-light: #eaf2fa;
+  --font-main: var(--ty-font);
+  --toolbar-height: 38px;
+}
+
+/* ---------- Palette: dark (close to Typora "Night") ---------- */
+html[data-ui="typora"][data-theme="dark"] {
+  --ty-text: #b8bfc6;
+  --ty-text-weak: #8b949e;
+  --ty-heading: #dedede;
+  --ty-bg: #363b40;
+  --ty-side-bg: #2e3033;
+  --ty-side-text: #b8bfc6;
+  --ty-side-hover: #3a3e42;
+  --ty-side-active: #45494e;
+  --ty-border: #474d54;
+  --ty-rule: #474d54;
+  --ty-code-bg: #333333;
+  --ty-code-border: #474d54;
+  --ty-inline-code-bg: #4a4f55;
+  --ty-link: #82b5e0;
+  --ty-table-stripe: #3c4146;
+  --ty-icon: #8b949e;
+
+  --color-text-secondary: #a0a7ae;
+  --color-text-muted: #7d848b;
+  --color-bg-tertiary: #3f4449;
+  --color-accent-light: #3a4a5a;
+}
+
+/* ==========================================================
+   App chrome
+   ========================================================== */
+html[data-ui="typora"] body {
+  background: var(--ty-bg);
+  color: var(--ty-text);
+  font-family: var(--ty-font);
+}
+
+/* Toolbar: thin, flush with the page, icons fade in on hover */
+html[data-ui="typora"] .toolbar {
+  height: var(--toolbar-height);
+  padding: 0 12px;
+  background: var(--ty-bg);
+  border-bottom: none;
+}
+html[data-ui="typora"] .toolbar-left,
+html[data-ui="typora"] .toolbar-right { gap: 2px; }
+html[data-ui="typora"] .toolbar .btn-icon {
+  padding: 6px;
+  color: var(--ty-icon);
+  opacity: 0.55;
+  border-radius: 4px;
+  transition: opacity 150ms ease, background 150ms ease;
+}
+html[data-ui="typora"] .toolbar .btn-icon svg { width: 16px; height: 16px; }
+html[data-ui="typora"] .toolbar:hover .btn-icon { opacity: 0.9; }
+html[data-ui="typora"] .toolbar .btn-icon:hover {
+  opacity: 1;
+  color: var(--ty-text);
+  background: var(--ty-side-hover);
+}
+html[data-ui="typora"] .version-chip { display: none; }
+html[data-ui="typora"] .agent-status-chip {
+  transform: scale(0.9);
+  opacity: 0.7;
+}
+
+/* Tabs: quiet strip, active tab merges into the page */
+html[data-ui="typora"] .tabs-bar {
+  height: 32px;
+  background: var(--ty-side-bg);
+  border-bottom: 1px solid var(--ty-border);
+}
+html[data-ui="typora"] .tabs-list { padding: 0; gap: 0; }
+html[data-ui="typora"] .tab-item {
+  top: 0;
+  height: 100%;
+  padding: 0 14px;
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--ty-border);
+  border-radius: 0;
+  color: var(--ty-text-weak);
+  font-size: 13px;
+}
+html[data-ui="typora"] .tab-item:hover { background: var(--ty-side-hover); color: var(--ty-text); }
+html[data-ui="typora"] .tab-item.active {
+  background: var(--ty-bg);
+  color: var(--ty-text);
+  border-color: var(--ty-border);
+  border-bottom: none;
+  box-shadow: inset 0 -1px 0 var(--ty-bg);
+}
+
+/* ---------- Sidebar ---------- */
+html[data-ui="typora"] .sidebar {
+  width: 250px;
+  background: var(--ty-side-bg);
+  border-right: 1px solid var(--ty-border);
+  font-family: var(--ty-font);
+}
+html[data-ui="typora"] .sidebar.collapsed {
+  width: 0;
+  min-width: 0;
+  border-right: none;
+}
+html[data-ui="typora"] .sidebar.collapsed .sidebar-minimap { display: none; }
+
+html[data-ui="typora"] .sidebar-tabs {
+  min-height: var(--toolbar-height);
+  padding: 0 16px;
+  gap: 18px;
+  justify-content: center;
+  background: var(--ty-side-bg);
+  border-bottom: none;
+}
+html[data-ui="typora"] .sidebar-tab {
+  flex: 0 0 auto;
+  padding: 8px 2px 6px;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ty-text-weak);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-bottom: 2px solid transparent;
+}
+html[data-ui="typora"] .sidebar-tab:hover { background: transparent; color: var(--ty-text); }
+html[data-ui="typora"] .sidebar-tab.active {
+  background: transparent;
+  color: var(--ty-heading);
+  border-bottom-color: var(--ty-heading);
+}
+/* The sidebar toggle lives in the status bar in this layout */
+html[data-ui="typora"] .sidebar-tabs .sidebar-toggle { display: none; }
+
+html[data-ui="typora"] .file-tree-toolbar {
+  padding: 4px 12px 8px;
+  border-bottom: none;
+}
+html[data-ui="typora"] .file-tree-btn {
+  width: 100%;
+  justify-content: center;
+  background: transparent;
+  border: 1px dashed var(--ty-rule);
+  color: var(--ty-text-weak);
+  font-size: 12px;
+  box-shadow: none;
+}
+html[data-ui="typora"] .file-tree-btn:hover { background: var(--ty-side-hover); color: var(--ty-text); }
+html[data-ui="typora"] .file-tree-search { padding: 0 12px 8px; border-bottom: none; }
+html[data-ui="typora"] .file-tree-search input {
+  height: 28px;
+  font-size: 12px;
+  background: var(--ty-bg);
+  border: 1px solid var(--ty-border);
+  border-radius: 4px;
+}
+
+html[data-ui="typora"] .file-tree-item,
+html[data-ui="typora"] .toc-item {
+  padding-top: 5px;
+  padding-bottom: 5px;
+  font-size: 13.5px;
+  color: var(--ty-side-text);
+  border-left: none;
+  border-radius: 0;
+}
+html[data-ui="typora"] .file-tree-item.is-dir { font-weight: 400; }
+html[data-ui="typora"] .file-tree-item:hover,
+html[data-ui="typora"] .toc-item:hover {
+  color: var(--ty-heading);
+  background: var(--ty-side-hover);
+}
+html[data-ui="typora"] .file-tree-item.active,
+html[data-ui="typora"] .toc-item.active {
+  color: var(--ty-heading);
+  background: var(--ty-side-active);
+  border-left: none;
+  font-weight: 400;
+}
+html[data-ui="typora"] .file-tree-item .tree-chevron { color: var(--ty-icon); }
+html[data-ui="typora"] .file-tree-empty,
+html[data-ui="typora"] .toc-empty { font-size: 12px; color: var(--ty-text-weak); }
+
+/* ---------- Status bar (Typora's bottom strip) ---------- */
+html[data-ui="typora"] .content-area { position: relative; }
+.ty-statusbar { display: none; }
+html[data-ui="typora"] .ty-statusbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 26px;
+  padding: 0 8px;
+  flex-shrink: 0;
+  background: var(--ty-bg);
+  border-top: 1px solid transparent;
+  color: var(--ty-text-weak);
+  font-size: 12px;
+  font-family: var(--ty-font);
+  user-select: none;
+  transition: border-color 150ms ease;
+}
+html[data-ui="typora"] .ty-statusbar:hover { border-top-color: var(--ty-border); }
+html[data-ui="typora"] .ty-statusbar-left,
+html[data-ui="typora"] .ty-statusbar-right { display: flex; align-items: center; gap: 2px; }
+
+html[data-ui="typora"] .ty-statusbar .sidebar-toggle,
+html[data-ui="typora"] .ty-statusbar .btn-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  min-width: 26px;
+  padding: 0 6px;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  color: var(--ty-icon);
+  font-size: 12px;
+  font-family: var(--ty-mono);
+  box-shadow: none;
+  cursor: pointer;
+}
+html[data-ui="typora"] .ty-statusbar .sidebar-toggle:hover,
+html[data-ui="typora"] .ty-statusbar .btn-toggle:hover {
+  background: var(--ty-side-hover);
+  color: var(--ty-text);
+}
+html[data-ui="typora"] .ty-statusbar .btn-toggle.active {
+  background: var(--ty-side-active);
+  color: var(--ty-heading);
+}
+html[data-ui="typora"] .ty-wordcount {
+  padding: 0 6px;
+  font-variant-numeric: tabular-nums;
+  cursor: default;
+}
+
+/* ==========================================================
+   Document (Typora "GitHub" look)
+   ========================================================== */
+html[data-ui="typora"] .markdown-body {
+  max-width: var(--ty-content-width);
+  padding: 30px 30px 100px;
+  font-family: var(--ty-font);
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--ty-text);
+  background: var(--ty-bg);
+}
+html[data-ui="typora"] .content-main-wrapper { background: var(--ty-bg); }
+
+html[data-ui="typora"] .markdown-body h1,
+html[data-ui="typora"] .markdown-body h2,
+html[data-ui="typora"] .markdown-body h3,
+html[data-ui="typora"] .markdown-body h4,
+html[data-ui="typora"] .markdown-body h5,
+html[data-ui="typora"] .markdown-body h6 {
+  position: relative;
+  margin: 1em 0 16px;
+  padding: 0;
+  color: var(--ty-heading);
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: normal;
+  background: none;
+  -webkit-text-fill-color: currentColor;
+  border: none;
+}
+html[data-ui="typora"] .markdown-body h1 {
+  font-size: 2.25em;
+  line-height: 1.2;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--ty-border);
+}
+html[data-ui="typora"] .markdown-body h2 {
+  font-size: 1.75em;
+  line-height: 1.225;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--ty-border);
+}
+html[data-ui="typora"] .markdown-body h3 { font-size: 1.5em; line-height: 1.43; }
+html[data-ui="typora"] .markdown-body h4 { font-size: 1.25em; }
+html[data-ui="typora"] .markdown-body h5 { font-size: 1em; }
+html[data-ui="typora"] .markdown-body h6 { font-size: 1em; color: var(--ty-text-weak); }
+html[data-ui="typora"] .markdown-body > :first-child,
+html[data-ui="typora"] .markdown-body .markdown-content > :first-child { margin-top: 0; }
+
+html[data-ui="typora"] .markdown-body p,
+html[data-ui="typora"] .markdown-body ul,
+html[data-ui="typora"] .markdown-body ol,
+html[data-ui="typora"] .markdown-body blockquote,
+html[data-ui="typora"] .markdown-body table,
+html[data-ui="typora"] .markdown-body pre { margin: 0.8em 0; }
+html[data-ui="typora"] .markdown-body li { margin: 0.2em 0; }
+html[data-ui="typora"] .markdown-body li > p { margin: 0.4em 0; }
+html[data-ui="typora"] .markdown-body ul,
+html[data-ui="typora"] .markdown-body ol { padding-left: 30px; }
+
+html[data-ui="typora"] .markdown-body a {
+  color: var(--ty-link);
+  text-decoration: none;
+  border-bottom: none;
+}
+html[data-ui="typora"] .markdown-body a:hover { text-decoration: underline; }
+html[data-ui="typora"] .markdown-body strong { color: inherit; font-weight: 700; }
+
+html[data-ui="typora"] .markdown-body blockquote {
+  padding: 0 15px;
+  color: var(--ty-text-weak);
+  background: none;
+  border: none;
+  border-left: 4px solid var(--ty-rule);
+  border-radius: 0;
+  box-shadow: none;
+  font-style: normal;
+}
+html[data-ui="typora"] .markdown-body blockquote::before,
+html[data-ui="typora"] .markdown-body blockquote::after { content: none; }
+html[data-ui="typora"] .markdown-body blockquote p { margin: 0.8em 0; }
+
+html[data-ui="typora"] .markdown-body hr {
+  height: 2px;
+  margin: 16px 0;
+  padding: 0;
+  background: #e7e7e7;
+  border: 0;
+}
+html[data-ui="typora"][data-theme="dark"] .markdown-body hr { background: var(--ty-rule); }
+
+/* Tables */
+html[data-ui="typora"] .markdown-body table {
+  display: table;
+  width: auto;
+  border-collapse: collapse;
+  border-spacing: 0;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
+  word-break: initial;
+}
+html[data-ui="typora"] .markdown-body thead { background: none; }
+html[data-ui="typora"] .markdown-body table tr {
+  background: var(--ty-bg);
+  border: none;
+  border-top: 1px solid var(--ty-rule);
+}
+html[data-ui="typora"] .markdown-body table tr:nth-child(2n),
+html[data-ui="typora"] .markdown-body thead tr { background: var(--ty-table-stripe); }
+html[data-ui="typora"] .markdown-body table th,
+html[data-ui="typora"] .markdown-body table td {
+  padding: 6px 13px;
+  margin: 0;
+  border: 1px solid var(--ty-rule);
+  color: var(--ty-text);
+  background: transparent;
+  text-align: left;
+}
+html[data-ui="typora"] .markdown-body table th { font-weight: 700; border-bottom: 0; }
+
+/* Code */
+html[data-ui="typora"] .markdown-body code {
+  padding: 0 2px;
+  font-family: var(--ty-mono);
+  font-size: 0.9em;
+  color: inherit;
+  background: var(--ty-inline-code-bg);
+  border: 1px solid var(--ty-code-border);
+  border-radius: 3px;
+}
+html[data-ui="typora"] .markdown-body pre {
+  padding: 8px 12px;
+  background: var(--ty-code-bg);
+  border: 1px solid var(--ty-code-border);
+  border-radius: 3px;
+  box-shadow: none;
+  font-size: 0.9em;
+  line-height: 1.5;
+}
+html[data-ui="typora"] .markdown-body pre code {
+  padding: 0;
+  background: transparent;
+  border: none;
+  font-size: 1em;
+}
+/* Light mode: swap Prism's dark "Tomorrow" palette for a light one */
+html[data-ui="typora"]:not([data-theme="dark"]) .markdown-body pre[class*="language-"],
+html[data-ui="typora"]:not([data-theme="dark"]) .markdown-body code[class*="language-"] {
+  color: #333;
+  text-shadow: none;
+  background: transparent;
+}
+html[data-ui="typora"]:not([data-theme="dark"]) .markdown-body pre[class*="language-"] { background: var(--ty-code-bg); }
+html[data-ui="typora"]:not([data-theme="dark"]) .markdown-body .token.comment,
+html[data-ui="typora"]:not([data-theme="dark"]) .markdown-body .token.prolog { color: #a0a1a7; font-style: italic; }
+html[data-ui="typora"]:not([data-theme="dark"]) .markdown-body .token.keyword,
+html[data-ui="typora"]:not([data-theme="dark"]) .markdown-body .token.selector { color: #a626a4; }
+html[data-ui="typora"]:not([data-theme="dark"]) .markdown-body .token.string,
+html[data-ui="typora"]:not([data-theme="dark"]) .markdown-body .token.attr-value { color: #50a14f; }
+html[data-ui="typora"]:not([data-theme="dark"]) .markdown-body .token.function { color: #4078f2; }
+html[data-ui="typora"]:not([data-theme="dark"]) .markdown-body .token.number,
+html[data-ui="typora"]:not([data-theme="dark"]) .markdown-body .token.boolean { color: #986801; }
+html[data-ui="typora"]:not([data-theme="dark"]) .markdown-body .token.operator,
+html[data-ui="typora"]:not([data-theme="dark"]) .markdown-body .token.punctuation { color: #383a42; background: none; }
+html[data-ui="typora"]:not([data-theme="dark"]) .markdown-body .token.builtin,
+html[data-ui="typora"]:not([data-theme="dark"]) .markdown-body .token.class-name { color: #c18401; }
+
+/* Math: no card, centered, like Typora */
+html[data-ui="typora"] .markdown-body .math-block {
+  margin: 1em 0;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  text-align: center;
+}
+html[data-ui="typora"] .markdown-body .katex { font-size: 1.1em; }
+html[data-ui="typora"] .markdown-body .math-block .katex-display { margin: 0.6em 0; }
+
+/* Images */
+html[data-ui="typora"] .markdown-body img {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* Welcome screen */
+html[data-ui="typora"] .welcome-message h1 {
+  color: var(--ty-heading);
+  border-bottom: none;
+  font-weight: 300;
+  letter-spacing: 0.02em;
+}
+html[data-ui="typora"] .welcome-message p { color: var(--ty-text-weak); }
+
+/* Source view: plain editor-like page */
+html[data-ui="typora"] .source-view {
+  background: var(--ty-bg);
+  padding: 30px 0 100px;
+}
+html[data-ui="typora"] .source-code {
+  max-width: var(--ty-content-width);
+  margin: 0 auto;
+  padding: 0 30px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  font-size: 14px;
+  color: var(--ty-text);
+}
+
+/* Scrollbars: thin and neutral */
+html[data-ui="typora"] ::-webkit-scrollbar { width: 8px; height: 8px; }
+html[data-ui="typora"] ::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+}
+html[data-ui="typora"][data-theme="dark"] ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); }
+html[data-ui="typora"] ::-webkit-scrollbar-track { background: transparent; }
+
+/* Print / PDF export keeps the document look, drops the chrome */
+@media print {
+  html[data-ui="typora"] .ty-statusbar { display: none !important; }
+}
+
+/* Source toggle shows Typora's "</>" glyph instead of text */
+html[data-ui="typora"] .ty-statusbar #sourceToggle .toggle-label { display: none; }
+html[data-ui="typora"] .ty-statusbar #sourceToggle::before { content: "</>"; letter-spacing: -0.05em; }
+
+/* Code block language label: Typora shows it quietly in the bottom-right corner */
+html[data-ui="typora"] .markdown-body pre[data-language]::before {
+  top: auto;
+  left: auto;
+  right: 8px;
+  bottom: 4px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--ty-text-weak);
+  font-family: var(--ty-font);
+  font-size: 11px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+html[data-ui="typora"] .markdown-body pre[data-language]:hover::before { opacity: 0.8; }
+html[data-ui="typora"] .markdown-body pre[data-language] { padding-bottom: 18px; }
+html[data-ui="typora"] .markdown-body .code-block-actions { top: 4px; right: 6px; }
+html[data-ui="typora"] .markdown-body .code-block-btn {
+  color: var(--ty-text-weak);
+  background: var(--ty-bg);
+  border: 1px solid var(--ty-code-border);
+}
+html[data-ui="typora"] .markdown-body .code-block-btn:hover { color: var(--ty-text); background: var(--ty-side-hover); }
+
+/* Source mode: no floating card */
+html[data-ui="typora"] .source-code { box-shadow: none; }
